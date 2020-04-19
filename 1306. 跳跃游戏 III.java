@@ -1,3 +1,4 @@
+/*
 这里有一个非负整数数组 arr，你最开始位于该数组的起始下标 start 处。当你位于下标 i 处时，你可以跳到 i + arr[i] 或者 i - arr[i]。
 
 请你判断自己是否能够跳到对应元素值为 0 的 任意 下标处。
@@ -21,8 +22,8 @@
 输入：arr = [3,0,2,1,2], start = 2
 输出：false
 解释：无法到达值为 0 的下标 1 处。 
+*/
 
-```java
 class Solution {
     public boolean canReach(int[] arr, int start) {
         /*
@@ -43,4 +44,4 @@ class Solution {
         return flag;
     }
 }
-```
+

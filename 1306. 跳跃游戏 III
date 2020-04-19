@@ -22,7 +22,7 @@
 输出：false
 解释：无法到达值为 0 的下标 1 处。 
 
-
+```java
 class Solution {
     public boolean canReach(int[] arr, int start) {
         /*
@@ -43,3 +43,4 @@ class Solution {
         return flag;
     }
 }
+```

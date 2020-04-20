@@ -38,7 +38,17 @@ class Solution {
 //思路②、双指针
 class Solution {
     public List<List<Integer>> pairSums(int[] nums, int target) {
-        //5 5 6 6
+        /*
+        5 5 6 6
+        双指针法：
+        计算出 sum = nums[left] + nums[right] 的值，如果刚好等于 target ,那么直接添加
+        因为这两个数都用过了，并且每个数只能用一次，因此直接 left++ 和 right--
+
+        如果 sum > target，那么 right 指针左移，即 right--,
+        比如 [1 2 3 4 5 6] target = 4
+             ↑          ↑
+        sum > target，因为 left 是可用的最小值了，因此如果 sum 过大，那么 right 一定不存在匹配的数
+        */
         List<List<Integer>> res = new ArrayList<>();
         Arrays.sort(nums);
         int left = 0;

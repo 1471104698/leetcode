@@ -10,14 +10,15 @@
 0 <= len(words) <= 100
 1 <= len(words[i]) <= 100
 
-        /*
+/*
+思路①、排序 + 动规
             将字符串按长度降序排列，即长度越长，则排在越前面
             如果长度相等，则按字典序升序排列，即如果字符串越小，则排在越前面
 
-            那么，按这个顺序，我们从头开始遍历字符串，判断字符串是否能由其他单词组成
+            那么，按这个顺序，我们从头开始遍历字符串，判断字符串是否能由其他单词组成,最先找到 的就是满足条件的单词（最长，且字典序最小）
 
             这里使用 dp
-        */
+*/
 class Solution {
     public String longestWord(String[] words) {
 
@@ -53,5 +54,39 @@ class Solution {
             }
         }
         return "";
+    }
+}
+
+
+//思路②、排序 + 递归
+class Solution {
+    public String longestWord(String[] words) {
+        //排序然后递归
+        Arrays.sort(words, (a, b) -> (a.length() == b.length() ? 
+		(a + b).compareTo(b + a) : b.length() - a.length()));
+
+        Set<String> set = new HashSet<>(Arrays.asList(words));
+        for(String word : words){
+            int len = word.length();
+            //不能到遍历最后一个字符，如果遍历到最后一个，那么 word.substring(0, i) 截取的就是 word 本身
+            for(int i = 1; i < len; i++){
+                if(set.contains(word.substring(0, i)) && isOk(word.substring(i), set)){
+                    return word;
+                }
+            }
+        }
+        return "";
+    }
+    //判断字符串是否能够由其他单词组成，这里可以由 word 本身组成，也可以由多个单词组成
+    private boolean isOk(String word, Set<String> set){
+        if("".equals(word) || set.contains(word)){
+            return true;
+        }
+        for(int i = 1; i <= word.length(); i++){
+            if(set.contains(word.substring(0, i)) && isOk(word.substring(i), set)){
+                return true;
+            }
+        }
+        return false;
     }
 }

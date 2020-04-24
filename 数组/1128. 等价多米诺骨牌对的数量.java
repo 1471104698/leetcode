@@ -26,7 +26,12 @@ class Solution {
         /*
         因为题目说了，每个元素在 [0, 9]，因此可以使用 i * 10 + j 作为索引
         将一维数组排序，然后统计等价的数组个数
+		
         最后对每个等价数组进行排列组合的统计： n * (n - 1) / 2
+		比如 a b c d 任意组合，有
+			b	   	   c		   d
+		a	c	和 b   d	和 c		6 种
+			d
         */
         int[] cp = new int[100];
         for(int[] arr : dominoes){

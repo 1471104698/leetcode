@@ -90,6 +90,7 @@ class Solution {
 		但这里为什么是 + 100 * len ？ 因为负数可能很少，比如 len = 5 ，而 idx = -100，那么 + len 后显然还是负数，因此我们需要加上 len * 100
 	*/
     private int getIndex(int len, int idx){
+		//return (idx % len + len) % len;  负数取同余
         return (idx + 1000 * len) % len;
     }
 }

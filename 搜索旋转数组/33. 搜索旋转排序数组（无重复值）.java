@@ -43,3 +43,30 @@ class Solution {
         return nums.length > 0 && nums[left] == target ? left : -1;
     }
 }
+
+//思路②、与 面试题 10.03. 搜索旋转数组（查找 target 最小索引位置）一样的方法，这是通用方法
+class Solution {
+    public int search(int[] arr, int target) {
+        return helper(arr, target, 0, arr.length - 1);
+    }
+    private int helper(int[] arr, int target, int left, int right){
+        if(left > right){
+            return -1;
+        }
+        //注意：这里不存在普遍二分查找的 while(left < right)
+        int mid = (left + right) >>> 1;
+        if(arr[mid] == target){
+            //向左递归，查找更小值
+            return mid;
+        }else{
+            //向左向右递归，得到结果存储到 left 和 right 中
+            left = helper(arr, target, left, mid - 1);
+            //如果左不为 -1，那么直接返回，不再向右递归
+            if(left != -1){
+                return left;
+            }
+            right = helper(arr, target, mid + 1, right);
+            return right;
+        }
+    }
+}

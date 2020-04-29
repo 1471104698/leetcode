@@ -38,8 +38,12 @@ class Solution {
         }
         //向左向右递归，得到结果存储到 left 和 right 中
         left = helper(arr, target, left, mid - 1);
+		//如果左不为 -1，那么直接返回，不再向右递归
+        if(left != -1){
+            return left;
+        }
         right = helper(arr, target, mid + 1, right);
         
-        return left != -1 ? left : right;
+        return right;
     }
 }

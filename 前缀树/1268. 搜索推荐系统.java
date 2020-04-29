@@ -55,11 +55,14 @@ class Solution {
         }
         TrieNode root = trie.root;
         List<List<String>> res = new ArrayList<>();
+		
+		//遍历 searchWord，添加对应字符结尾的字符串列表
         for(int i = 0; i < searchWord.length(); i++){
             if(root.childern[searchWord.charAt(i) - 'a'] != null){
                 root = root.childern[searchWord.charAt(i) - 'a'];
                 res.add(new ArrayList<>(root.list));
             }else{
+				//当有一个字符不一样，那么当前字符包括后面都不能匹配了，那么还剩多少位置就添加多少个空列表
                 while(i++ < searchWord.length()){
                     res.add(new ArrayList<>());
                 }

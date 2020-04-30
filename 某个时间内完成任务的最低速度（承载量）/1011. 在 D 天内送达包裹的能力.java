@@ -44,13 +44,13 @@ class Solution {
         */
         int len = weights.length;
         int sum = 0;
-        int max = 0;
+        int maxWeight = 0;
         for(int num : weights){
             sum += num;
-            max = Math.max(max, num);
+            maxWeight = Math.max(maxWeight, num);
         }
         //最低承载量
-        int left = Math.max(sum / D, max);
+        int left = Math.max(sum / D, maxWeight);
         //最高承载量
         int right = sum;
         while(left < right){

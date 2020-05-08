@@ -25,15 +25,7 @@
 
 输出: null
 
-/**
- * Definition for a binary tree node.
- * public class TreeNode {
- *     int val;
- *     TreeNode left;
- *     TreeNode right;
- *     TreeNode(int x) { val = x; }
- * }
- */
+
 class Solution {
     boolean flag = false;
     TreeNode next;

@@ -25,7 +25,6 @@
 
 输出: null
 
-
 class Solution {
     boolean flag = false;
     TreeNode next;

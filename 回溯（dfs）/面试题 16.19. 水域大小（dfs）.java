@@ -36,6 +36,8 @@ class Solution {
         return arr;
     }
 
+    int[][] pos = {{1, 0}, {1, 1}, {1, -1}, {-1, 0}, {-1, -1}, {-1, 1}, {0, 1}, {0, -1}};
+    
     private int dfs(int[][] land, int i, int j) {
         int rlen = land.length;
         int llen = land[0].length;
@@ -47,7 +49,6 @@ class Solution {
         //将遍历过的水域置为陆地，防止重复遍历
         land[i][j] = 1;
         //向 8 个方向遍历
-        int[][] pos = {{1, 0}, {1, 1}, {1, -1}, {-1, 0}, {-1, -1}, {-1, 1}, {0, 1}, {0, -1}};
         for (int[] p : pos) {
             count += dfs(land, i + p[0], j + p[1]);
         }

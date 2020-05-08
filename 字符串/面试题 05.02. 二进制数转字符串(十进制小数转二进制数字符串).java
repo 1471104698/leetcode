@@ -13,11 +13,19 @@
 
 32位包括输出中的"0."这两位。
 
+/*
+像评论区某位大佬所说，有 bug，末尾不是 5 的是无法精确的转换为二进制的，double 无法准确表示
+*/
 class Solution {
     public String printBin(double num) {
         if(num <= 0 || num >= 1){
             return "ERROR";
         }
+        //不是 5 结尾的不能准确转换
+        // String temp = String.valueOf(num);
+        // if(temp.charAt(temp.length() - 1) != '5'){
+        //     return "ERROR";
+        // }
         StringBuilder sb = new StringBuilder();
         sb.append("0.");
         while(num != 0){

@@ -74,9 +74,10 @@ class MedianFinder {
             而如果 num > minHeap.peek()，那么我们需要挤出 minHeap 的最小值，再将 num 添加到 minHeap
 			(
 			想想这是为什么？ 
-			提示：插入顺序 ：1 2 3，此时 maxHeap = 1, minHeap = 2，num = 3  插入后 👉 maxHeap = 1 2, minHeap = 3
-				  插入顺序 ：3 2 1，此时 maxHeap = 2, maxHeap = 3，num = 1  插入后 👉 maxHeap = 1 2, minHeap = 3
-				  插入顺序： 1 3 2，此时 maxHeap = 1, maxHeap = 3，num = 2  插入后 👉 maxHeap = 1 2, minHeap = 3
+			提示：
+			插入顺序 ：1 2 3，此时 maxHeap = 1, minHeap = 2，num = 3  插入后 👉 maxHeap = 1 2, minHeap = 3
+			插入顺序 ：3 2 1，此时 maxHeap = 2, maxHeap = 3，num = 1  插入后 👉 maxHeap = 1 2, minHeap = 3
+			插入顺序： 1 3 2，此时 maxHeap = 1, maxHeap = 3，num = 2  插入后 👉 maxHeap = 1 2, minHeap = 3
 			)
             */
             if(minHeap.peek() < num){

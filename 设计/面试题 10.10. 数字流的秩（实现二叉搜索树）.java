@@ -48,74 +48,81 @@ class StreamRank {
     我们将小于等于 this.val 的值插在 this 的左子树，然后，顺便 leftSize++
     这意味着 this 节点的 leftSize 记录的是它左子树的节点个数
     */
-    class TreeNode{
-        TreeNode left;
-        TreeNode right;
-        int val;
-        int leftSize = 1;   //本身秩为 1 
-        public TreeNode(int val){
-            this.val = val;
-        }
-        public void insert(int val){
-            //同值也插在 left
-            if(this.val >= val){
-                this.leftSize++;
-                if(this.left == null){
-                    this.left = new TreeNode(val);
-                }else{
-                    this.left.insert(val);
-                }
-            }else{
-                if(this.right == null){
-                    this.right = new TreeNode(val);
-                }else{
-                    this.right.insert(val);
-                }
-            }
-        }
-
-        public int find(int val){
-            if(this.val > val){
-                if(this.left == null){
-                    return 0;
-                }
-                return this.left.find(val);
-            }else{
-                if(this.right == null){
-                    return this.leftSize;
-                }
-                return this.leftSize + this.right.find(val);
-            }
-        }
-    }
-    class BST{
+    class BST {
         TreeNode root;
-        public BST(){}
 
-        public void insert(int val){
-            if(root == null){
+        public BST() {
+        }
+
+        public void insert(int val) {
+            if (root == null) {
                 root = new TreeNode(val);
-            }else{
+            } else {
                 root.insert(val);
             }
         }
-        public int find(int val){
-            if(root == null){
+
+        public int find(int val) {
+            if (root == null) {
                 return 0;
             }
             return root.find(val);
         }
+
+        class TreeNode {
+            TreeNode left;
+            TreeNode right;
+            int val;
+            int leftSize = 1;   //本身秩为 1 
+
+            public TreeNode(int val) {
+                this.val = val;
+            }
+
+            public void insert(int val) {
+                //同值也插在 left
+                if (this.val >= val) {
+                    this.leftSize++;
+                    if (this.left == null) {
+                        this.left = new TreeNode(val);
+                    } else {
+                        this.left.insert(val);
+                    }
+                } else {
+                    if (this.right == null) {
+                        this.right = new TreeNode(val);
+                    } else {
+                        this.right.insert(val);
+                    }
+                }
+            }
+
+            public int find(int val) {
+                if (this.val > val) {
+                    if (this.left == null) {
+                        return 0;
+                    }
+                    return this.left.find(val);
+                } else {
+                    if (this.right == null) {
+                        return this.leftSize;
+                    }
+                    return this.leftSize + this.right.find(val);
+                }
+            }
+        }
     }
 
     BST bst;
+
     public StreamRank() {
         bst = new BST();
     }
-    
+
     public void track(int x) {
         bst.insert(x);
     }
-    
+
     public int getRankOfNumber(int x) {
         return bst.find(x);
     }

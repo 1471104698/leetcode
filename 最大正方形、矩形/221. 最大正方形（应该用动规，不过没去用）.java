@@ -11,6 +11,10 @@
 
 输出: 4
 
+/*
+具体看我题解
+
+*/
 class Solution {
     public int maximalSquare(char[][] matrix) {
         /*

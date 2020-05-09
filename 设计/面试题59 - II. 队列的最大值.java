@@ -108,6 +108,7 @@ class MaxQueue {
             }else if(stack.peek() == value){    //当栈顶元素等于当前元素，那么直接入栈
                 stack.push(value);
             }else{
+				//面试题 03.05. 栈排序 的做法
                 while(!stack.isEmpty() && stack.peek() >= value){   //当栈顶元素大于当前元素，将大于等于 value 的值压入辅助栈
                     helper_stack.push(stack.pop());
                 }

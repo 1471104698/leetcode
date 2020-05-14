@@ -63,6 +63,7 @@ class Solution {
             int size = queue.size();
             while(size-- > 0){
                 int p = queue.poll();
+				//从队列中弹出的节点都是入度为 0 的节点，我们只需要记录入度为 0 的节点个数即可
                 visited++;
 				 /*
                 当 list 为空，表示该节点没有通向任何一个节点，即自己就是道路的末尾

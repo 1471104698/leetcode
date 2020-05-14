@@ -32,18 +32,19 @@ class Solution {
         然后我们将入度为 0 的节点存储进队列中，将它和它所能到达的节点 next 的通路断开，即 next 的入度 -1，
         当减为 0 的时候，表示入度为 0，那么添加进队列中
         */
-
-        Map<Integer, List<Integer>> map = new HashMap<>();
+		
+		//这里本应使用 map ,但因为节点值已经确定了是在 [0, numCourses - 1] ，那么我们可以将该节点值作为下标值
+        List<Integer>[] lists = new List[numCourses];
 
         //存储每个节点的度
         int[] points = new int[numCourses];
         for(int[] p : prerequisites){
             points[p[1]]++;
-            if(!map.containsKey(p[0])){
-                map.put(p[0], new ArrayList<>());
+            if(lists[p[0]] == null){
+                lists[p[0]] = new ArrayList<>();
             }
             //记录某个点能够到达的其他的点
-            map.get(p[0]).add(p[1]);
+            lists[p[0]].add(p[1]);
         }
 
         Queue<Integer> queue = new LinkedList<>();
@@ -63,7 +64,7 @@ class Solution {
             while(size-- > 0){
                 int p = queue.poll();
                 visited++;
-                List<Integer> list = map.get(p);
+                List<Integer> list = lists[p];
                 if(list == null){
                     continue;
                 }

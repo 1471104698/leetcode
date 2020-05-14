@@ -63,6 +63,10 @@ class Solution {
                 int p = queue.poll();
                 visited++;
                 res[idx++] = p;
+				 /*
+                当 list 为空，表示该节点没有通向任何一个节点，即自己就是道路的末尾
+                比如用例：2, [[1,0]] ， 0 没有通向任何节点
+                */
                 List<Integer> list = lists[p];
                 if(list == null){
                     continue;

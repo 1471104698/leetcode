@@ -17,6 +17,8 @@ class Solution {
             方法二：
             (preSum[i] - preSum[j]) mod 1 == k ⟺ preSum[i] - k == preSum[j]
             我们使用 map 记录前缀结果和出现的次数
+
+            因为这里我们只需要要求 和为 k，而不需要求 mod k 的结果，因此无需关系 sum 是否为 负数 而进行特殊处理（负数处理见 974. 和可被 K 整除的子数组）
         */
         int len = nums.length;
         Map<Integer, Integer> map = new HashMap<>();

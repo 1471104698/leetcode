@@ -5,6 +5,7 @@
         boolean end = false;
         public TrieNode() {
         } 
+	}
 
     class Trie {
 

@@ -33,7 +33,7 @@ class Solution {
         然后我们将入度为 0 的节点存储进队列中，将它和它所能到达的节点 next 的通路断开，即 next 的入度 -1，
         当减为 0 的时候，表示入度为 0，那么添加进队列中
         */
-
+ 
         //存储某个节点能够到达的其他节点集合
         List<Integer>[] lists = new ArrayList[numCourses];
         //记录某个节点的入度

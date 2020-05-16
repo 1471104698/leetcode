@@ -22,6 +22,7 @@
 1 <= value <= 10^5
 
 
+//思路①、使用一个辅助栈
     /*
     等下，我们使用一个队列正常的存放数据，
     然后使用维护一个单调栈，栈顶为最大值
@@ -131,6 +132,46 @@ class MaxQueue {
         int temp = queue.poll();
         if(stack.peek() == temp){
             stack.pop();
+        }
+        return temp;
+    }
+}
+
+
+//思路②、使用一个辅助的双端队列作为最大队
+class MaxQueue {
+    /*
+    维护一个双端队列，最大队列，队列头部为最大值
+    */
+    Deque<Integer> maxQ;
+    Deque<Integer> queue;
+    public MaxQueue() {
+        maxQ = new LinkedList<>();
+        queue = new LinkedList<>();
+    }
+    
+    public int max_value() {
+        if(maxQ.isEmpty()){
+            return -1;
+        }
+        return maxQ.peek();
+    }
+    
+    public void push_back(int value) {
+        queue.add(value);
+        while(!maxQ.isEmpty() && maxQ.peekLast() < value){
+            maxQ.pollLast();
+        }
+        maxQ.add(value);
+    }
+    
+    public int pop_front() {
+        if(queue.isEmpty()){
+            return -1;
+        }
+        int temp = queue.poll();
+        if(maxQ.peek() == temp){
+            maxQ.poll();
         }
         return temp;
     }

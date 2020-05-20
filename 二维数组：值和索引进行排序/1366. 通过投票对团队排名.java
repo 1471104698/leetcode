@@ -86,8 +86,13 @@ class Solution {
         我们只需要使用变量 visited 记录遍历了多少个 id ，当 id == size（参赛人数） 时表示所有参赛 id 遍历完毕
         */
         StringBuilder sb = new StringBuilder();
-        for(int i = 0, visited = 0; visited < size; i++, visited++){
-            sb.append((char)(temp[i][0] + 'A'));
+        int visited = 0;
+        for(int[] arr : temp){
+            sb.append((char)(arr[0] + 'A'));
+            visited++;
+            if(visited == size){
+                break;
+            }
         }
         return sb.toString();
     }

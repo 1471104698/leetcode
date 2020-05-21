@@ -50,29 +50,38 @@ class ProductOfNumbers {
     前面计算结果集合为 {1, 3, 6}，然后遇到 0，清空，变成 {1}
     后面的结算结果为 {1, 2, 10, 40}，如果 k 大于等于 集合元素个数（注意，除去 1 本来只有 3 个，如果 k = 4 ，那么就超过这 3 个），表示需要包含之前的 0 元素，那么乘积结果必定为 0，因此直接返回 0
     */
-    List<Integer> product;
-    int count;
+    List<Integer> list;
     public ProductOfNumbers() {
-        product = new ArrayList<>();
-        product.add(1);
-        count = 1;
+        list = new ArrayList<>();
+		/*
+		求前缀必然需要添加底层元素
+		这里添加底层元素 1，方便处理
+		比如 list = {1, 2, 10, 20}
+		k = 3
+		那么就需要 20 / 1 = 20，可以直接返回 20
+		如果是 {2, 10, 20}，则需要考虑是否越界
+		*/
+        list.add(1);
     }
     
     public void add(int num) {
         if(num == 0){
-            product.clear();
-            product.add(1);
-            count = 1;
+            list.clear();
+            list.add(1);
         }else{
-            product.add(product.get(count - 1) * num);
-            count++;
+            if(list.size() == 0){
+                list.add(num);
+            }else{
+                list.add(list.get(list.size() - 1) * num);
+            }
         }
     }
     
     public int getProduct(int k) {
-        if(k >= count){
+        if(k >= list.size()){
             return 0;
         }
-        return product.get(count - 1) / product.get(count - k - 1);
+        //3 2
+        return list.get(list.size() - 1) / list.get(list.size() - k - 1);
     }
 }

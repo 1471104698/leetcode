@@ -1,9 +1,10 @@
     class TrieNode{
         String val;
-        TrieNode[] childern = new TrieNode[26];
-        记录当前节点是否是某个单词的结尾
+        TrieNode[] childern;
+        //记录当前节点是否是某个单词的结尾
         boolean end = false;
         public TrieNode() {
+			childern = new TrieNode[26];
         } 
 	}
 

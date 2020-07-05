@@ -32,18 +32,20 @@ for(int num : set){
 
 ```java
 1、sort()
-Arrays.sort(T[] a) 
-不支持 int[] 、boolean[] 之类的基本数据类型数组，因为传参类型为 T，基本数据类型不属于泛型范围，只能是 Integer[] 等包装类 数组 或 String[] 
+Arrays.sort(int[] a) 
+    支持基本数据类型和包装类
 
 Arrays.sort(T[] a, Comparator<? super T> c)
-可以传入比较器，默认比较方式为升序
+可以传入比较器，默认比较方式为升序，不支持基本数据类型
 
-Arrays.sort(T[] a, int formIndex, toIndex)
+Arrays.sort(int[] a, int formIndex, toIndex)
 只排序指定范围
 这里有个坑：formIndex 是开始的索引位置，而 toIndex 是结束的位置，但是排序范围并不包含 toIndex
 即该方法的指定范围 类似于 String 的 substring()
 
 Arrays.sort(T[] a, int formIndex, toIndex, Comparator<? super T> c)
+    
+//存在比较器的不支持基本数据类型
     
 2、toString()
 Arrays.toString()：将数组转换为字符串输出，该方法只支持基本数据类型 int[] boolean[] 之类的，其他的不支持

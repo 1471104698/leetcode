@@ -28,7 +28,24 @@ for(int num : set){
 
 
 
-## 2、Arrays
+
+
+## 2、TreeMap
+
+```java
+1、
+
+higherEntry(T t)：获取比 t 严格大的 entry 节点，如果没有，返回 null
+lowerEntry(T t)：获取比 t 严格小的 entry 节点，如果没有，返回 null
+ceilingEntry(T t)：获取大于等于 t 的 entry 节点，如果没有，返回 null
+floorEntry(T t)：获取小于等于 t 的 entry 节点，如果没有，返回 null
+```
+
+
+
+
+
+## 3、Arrays
 
 ```java
 1、sort()
@@ -55,7 +72,7 @@ Arrays.toString()：将数组转换为字符串输出，该方法只支持基本
 
 
 
-## 3、List / Set 的 toArray()
+## 4、List / Set 的 toArray()
 
 ```java
 list.toArray() 方法不支持基本数据类型，只能转换为包装类型 和 String 和 二维数组 int[][] 等
@@ -73,4 +90,8 @@ int[][] a = new int[3][];
 list.toArray(a);
 该做法是可以的 √
 ```
+
+
+
+
 

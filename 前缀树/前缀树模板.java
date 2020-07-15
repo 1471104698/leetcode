@@ -18,7 +18,7 @@
         
         public void insert(String word) {
             TrieNode cur = root;
-            for(int i = 0; i  word.length(); i++){
+            for(int i = 0; i < word.length(); i++){
                 int ch = word.charAt(i) - 'a';
                 if(cur.childern[ch] == null){
                     cur.childern[ch] = new TrieNode();

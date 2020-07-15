@@ -93,5 +93,13 @@ list.toArray(a);
 
 
 
+## 5、List 的 set(int idx, int val)
+
+```java
+使用 list.set(int idx, int val) 可以直接使用 val 值覆盖原本 idx 位置的值
+用于 "381. O(1) 时间插入、删除和获取随机元素 - 允许重复" 中将 list 末尾的值直接覆盖到要删除的 idx 位置的值，
+然后删除末尾的值，防止数组的元素移动，达到 O(1) 删除
+```
+
 
 

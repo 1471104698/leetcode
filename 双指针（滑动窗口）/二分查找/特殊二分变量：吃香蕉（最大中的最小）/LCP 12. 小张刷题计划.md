@@ -140,7 +140,7 @@ class Solution {
             if (sum - maxVal > mid) {
                 m--;
                 sum = 0;
-                maxVal = time[i];;
+                maxVal = 0;
                 continue;
             }
             i++;

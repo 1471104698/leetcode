@@ -103,3 +103,41 @@ list.toArray(a);
 
 
 
+## 6、接口实现 ArrayDeque 和 LinkedList 的区别
+
+- ArrayDeque 不可以添加 null 值，LinkedList 可以添加 null 值
+
+  - 使用的时候需要注意，对于层次遍历之类的，如果队列实现是 ArrayDeque ，那么需要对左右子节点判空再添加，如果是 LinkedList ，则不需要
+  - 下面是 两者 add() 方法的底层实现
+
+  ```java
+  //ArrayDeque add()方法底层实现
+  public void addLast(E e) {
+      //遇到空值直接抛异常
+      if (e == null)
+          throw new NullPointerException();
+      elements[tail] = e;
+      if ( (tail = (tail + 1) & (elements.length - 1)) == head){
+          //扩容
+          doubleCapacity();
+      }
+  }
+  
+  //LinkedList add() 方法底层实现，没有对空值处理
+  void linkLast(E e) {
+      final Node<E> l = last;
+      final Node<E> newNode = new Node<>(l, e, null);
+      last = newNode;
+      if (l == null)
+          first = newNode;
+      else
+          l.next = newNode;
+      size++;
+      modCount++;
+  }
+  ```
+
+  
+
+- ArrayDeque 底层是数组，LinkedList 底层是链表
+

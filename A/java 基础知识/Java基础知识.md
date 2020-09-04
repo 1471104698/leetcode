@@ -1,4 +1,4 @@
-# 基础知识
+# Java 基础知识
 
 
 
@@ -31,7 +31,7 @@ class B extends A{
 
 
 
-> 多态的概念
+> ### 多态的概念
 
 多态，如字面意思，同种行为具有不同的表现形态
 
@@ -45,7 +45,7 @@ class B extends A{
 
 
 
-> 多态产生的必要条件
+> ### 多态产生的必要条件
 
 **多态存在的三个必要条件**
 
@@ -75,7 +75,7 @@ Parent p = new Child();
 
 
 
-> 重载是不是多态呢？
+> ### 重载是不是多态呢？
 
 多态产生的 3 个必要条件中，第二个条件说的是重写，那么重载是不是多态呢？
 
@@ -87,7 +87,7 @@ Parent p = new Child();
 
 
 
-> 两种多态类型：编译时多态 和 运行时多态
+> ### 两种多态类型：编译时多态 和 运行时多态
 
 **编译时多态：编译期间就确定的**，主要是方法重载、 静态方法成员和变量、非静态成员变量
 
@@ -132,7 +132,7 @@ p.run();
 
 
 
-> 浮点数在计算机中的存储
+> ### 浮点数在计算机中的存储
 
 |        | 符号位 | 指数   | 尾数   |
 | ------ | ------ | ------ | ------ |
@@ -165,7 +165,7 @@ p.run();
 
 
 
-> 将上面的运算替换为 float 后是什么结果？
+> ### 将上面的运算替换为 float 后是什么结果？
 
 我们也说了，浮点数默认是 double 类型，如果我们转换成 
 
@@ -177,7 +177,7 @@ p.run();
 
 
 
-> float 和 double 比较
+> ### float 和 double 比较
 
 ```java
 float f1 = 0.5f;
@@ -238,227 +238,9 @@ System.out.println(s1 == s2); //true
 
 
 
-## 4、hashmap 相关知识
 
 
-
-### 4.1、hashmap 和 hashtable 的区别
-
----
-
-
-
-> 相同点
-
-hashmap 和 hashtable 都实现了 Map 接口
-
-
-
-> 区别
-
-hashmap 是线程不安全的，所有方法都没有锁机制
-
-hashtable 是线程安全的，所有方法都加了重量级锁 synchronized
-
-
-
-hashmap 的 key 和 value 都允许空值
-
-hashtable 的 key 和 value 都不允许空值
-
-
-
-hashmap 的默认容量是 16，后续扩容直接 * 2，即 cap << 1，这样就能保证是 2 的指数
-
-hashtable 的默认容量是 11，后续扩容是 2 * old + 1
-
-
-
-hashmap 的遍历方式是 iterator
-
-hashtable 的遍历方式是 xxx（不知道什么东西）
-
-
-
-一般在单线程下，我们使用的是 hashmap，效率比 hashtable 高
-
-一般在多线程下，我们不使用 hashtable，也肯定不能使用 hashmap，而是使用一个效率更高的用来代替 hashtable 的 ConcurrentHashMap
-
-
-
-### 4.2、hashmap 求 2 的指数的算法
-
----
-
-
-
-该算法能够得到比 cap 大的最接近 cap 的 2 的指数
-
-```java
-static final int tableSizeFor(int cap) {
-    int n = cap - 1;
-    n |= n >>> 1;
-    n |= n >>> 2;
-    n |= n >>> 4;
-    n |= n >>> 8;
-    n |= n >>> 16;
-    return (n < 0) ? 1 : (n >= MAXIMUM_CAPACITY) ? MAXIMUM_CAPACITY : n + 1;
-}
-```
-
-
-
-假设 n 的二进制数为 01xxxxxxxxxx
-
-n |= n >>> 1； 对 n 右移 1 位，然后进行或操作，那么 n 变成  011xxxxxxxxx
-
-n |= n >>> 2； 对 n 右移 2 位，然后进行或操作，那么 n 变成  01111xxxxxxx
-
-n |= n >>> 4； 对 n 右移 4 位，然后进行或操作，那么 n 变成  011111111xxx
-
-n |= n >>> 8； 对 n 右移 8 位，然后进行或操作，那么 n 变成  011111111111.。。。
-
-。。。
-
-可以看出，最终所有操作执行完毕，得到的是将最高位的 1 后面的数全部变成 1，比如 0100101，那么就变成 0111111
-
-然后最后对它进行 n + 1，就变成 1000000，刚好是 2 的指数次
-
-上面是 1 + 2 + 4 + 8 + 16 = 31，因为 int 型是 32 位，这样能够覆盖所有二进制数
-
-
-
-最开始是 n = cap - 1 是为了防止最开始的 cap 就是 2 的指数的问题
-
-比如 cap = 0100，最接近 cap 的 2 的指数就是它本身，那么 cap - 1 后 n = 0011，那么经过计算 n = 0100
-
-而如果 cap 不减 1，那么 n = 0100，经过计算后会变成 n = 1000
-
-
-
-### 4.3、hashmap 的扩容机制 resize()
-
----
-
-> 什么时候会触发扩容？
-
-
-
-当元素数量超过阈值的时候，那么就会触发扩容
-
-阈值 = 容量 * 加载因子（加载因子一般是 0.75）
-
-
-
-扩容是 容量变为原来的 2 倍，cap << 1，而阈值也同样变为原来的 2 倍
-
-
-
-需要注意的是，一般是在 put() 完元素的时候，才判断是否需要进行扩容，即添加完元素再进行扩容的
-
-
-
-> JDK 7 和 JDK 8 的扩容后进行的元素迁移机制
-
-**JDK 7：**所有的元素都是链表的保存形式，开辟一个新的 Entry[] 数组后，开始将旧数组上的 Entry 插入到新的数组上去
-
-**注意点：**
-
-- 使用的是头插法，即旧数组按序遍历的节点，每次都是插入到新数组对应链表的头部，那么就会造成原本的节点顺序发生翻转
-- 多线程下，元素迁移的过程中会发生死循环
-
-
-
-**JDK 8：**由于 JDK 8 的容量始终是 2 的指数次幂，因此大大提高了迁移的效率，每个 Entry 无需重新 hash 来决定它在新数组中的存放位置，新的位置不是在 **原位置**，就是在 **原位置 + 原长度**
-
-为什么？原因如下：
-
- ![img](https://pic2.zhimg.com/80/v2-da2df9ad67181daa328bb09515c1e1c8_720w.png) 
-
-我们可以知道，JDK 8 扩容就是将 容量 左移一位，即 n << 1
-
-当原容量为  1 0000 的时候，那么就是使用 n - 1 = 1111 来对 Entry  hash，那么只有尾四位进行计算，始终落在 0 - 15 的位置
-
-而当扩容后，变成 10 0000 的时候，那么就是使用 n - 1 = 1 1111 来对 Entry hash，那么就多了高位一个 1，就是尾 五位 进行计算，这个 高位 1 就是原数组的长度，因此如果 hash 后该位置不为 0，只需要在原位置 加上原数组长度就是新的位置了
-
-**注意点：**
-
-- 正序插入，不会出现链表倒置
-- 超过 8 个元素就将链表转换为红黑树，加快查询效率
-
-
-
-> JDK 7 元素迁移 在 多线程 下死循环是如何产生的？
-
-我们需要先看 JDK 7 元素迁移的代码：
-
-```java
-
-//newTable：新的数组，rehash：是否重新计算哈希
-void transfer(Entry[] newTable, boolean rehash) {
-    //获取新数组的长度
-    int newCapacity = newTable.length;
-    
-    //遍历旧数组，需要注意的是，这里的 e 是一个链表头，而不是单单一个元素，通过 next 获取下一个节点
-    for (Entry<K,V> e : table) {
-        while(null != e) {
-            //先记录下一个节点
-            Entry<K,V> next = e.next;
-            if (rehash) {
-                e.hash = null == e.key ? 0 : hash(e.key);
-            }
-            int i = indexFor(e.hash, newCapacity);
-            /*
-            将节点 e 插入到 新的位置的头部，作为头节点，这就是头插法
-            比如 
-            e = 4
-            newTable[i] = 3 -> 2 -> 1
-            经过头插法
-            那么就变成了 newTable[i] = 4 -> 3 -> 2 -> 1
-            */
-            e.next = newTable[i];
-            newTable[i] = e;
-            e = next;
-        }
-    }
-```
-
-
-
-**单线程下的元素迁移：**
-
- ![img](https://img-blog.csdnimg.cn/20190331174623768.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzIyMTU4NzQz,size_16,color_FFFFFF,t_70) 
-
-
-
-**多线程下的元素迁移：**
-
-我们需要知道，多线程不是并行执行的，而是并发执行的，某个线程执行的过程中可能 CPU 会切换到其他线程
-
-因此，某段代码 线程安不安全需要看 CPU 切换后执行别的线程是否对当前线程的这段代码的结果产生影响
-
-很显然，这里就会
-
-**过程：**
-
-- 线程 1 和 线程 2 同时扩容，CPU 先执行线程 1
-
-- 当线程 1 执行完 `Entry<K,V> next = e.next;` ，CPU 切换到 线程 2 ，注意，这里线程 1 的 e 指向的是 节点 3，而 next 指向 节点 7
-- 当线程 2 执行完成后，由于是头插法，那么意味着最终的数组从 3 -> 7 就变成了 7 -> 3，注意，这里 7.next = 3，然后切换到线程 1
-- 线程 1 将节点 3 插入到新的数组上，3.next = null，然后再处理 next = 7，一次新循环将 e 指向 7，由于 7.next = 3，所以 next = 3**（循环的初步建立）**
-- 当使用头插法插入到新位置时，由于 3 和 7 是同个位置，因此 7 作为头节点时，7.next = 3，再然后处理 next = 3，一次新循环将 e 指向 3，再将 3 插入到新位置头节点，这时 3.next = 7，**死循环构成**
-
-  
-
-**这里需要注意的是：**Entry 节点对象至始至终都没有发生改变，改变的是新旧数组这个容器 和 Entry 对象存储的位置，并没有创建新的 Entry 对象去代替旧的 Entry 对象，它们存储在堆中，是所有线程共享的
-
-因此线程 1 和 线程 2 操作的一直是同样的几个 Entry 对象，所以才造成了死循环
-
-
-
-
-
-## 5、java 如何实现连续的内存分配
+## 4、java 如何实现连续的内存分配
 
 使用 new byte[size]
 
@@ -466,7 +248,7 @@ void transfer(Entry[] newTable, boolean rehash) {
 
 
 
-## 6、子类继承和不继承父类什么东西
+## 5、子类继承和不继承父类什么东西
 
 子类可以继承父类的 非 private 修饰的 非静态方法和变量
 
@@ -537,7 +319,7 @@ A printB
 
 
 
-## 7、红黑树的基础
+## 6、红黑树的基础
 
 **二叉搜索树：**根节点大于左子节点，小于右子节点，方便查找，但是不平衡，可能退化成链表
 
@@ -555,10 +337,87 @@ A printB
 
 
 
-> 红黑树的基本性质
+> ### 红黑树的基本性质
 
 - 节点有红黑两色
 - 根节点必定是黑色的
 - 没有两个相邻的红色节点（即父子节点不可能同时是红色的）
 - NULL 节点是黑色的（我们认为叶子节点下面还有两个 NULL 节点，这肯定是为了方便某种东西的计算）
 - 从任意一个节点到达 NULL 节点的路径上都有相同的 黑色节点数（不包括 NULL 节点到 NULL 节点）
+
+
+
+
+
+## 7、反射可以修改 final 修饰的值
+
+> ### 前置知识点
+
+主要 API：
+
+- 成员变量：Field
+- 成员方法：Method
+- 构造方法：Constructor
+
+获取 Class 对象的方式：
+
+- 类`.class`
+- `Class.forName()`
+- 实例对象`.getClass()`
+
+获取成员变量以及进行修改
+
+- 获取 public 修饰的所有成员变量：`clazz.getFields()`
+- 获取 public 修饰的指定的某个成员变量：`clazz.getField(String name);`
+- 获取所有成员变量：`clazz.getDeclaredFields()`
+- 获取某个指定的成员变量：`clazz.getDeclaredField(String name)`
+- 设置某个成员变量的修改权限（比如 final 修饰）：`field.setAccessible(true);`
+
+获取对象的成员方法
+
+- 获取 public 修饰的所有构造方法：`clazz.getConstructors();`
+- 获取 public 修饰的某个构造方法，没有参数就是无参：`clazz.getConstructor();`
+- 获取所有构造方法：`clazz.getDeclaredConstructors();`
+- 获取某个构造方法，一般是无参：`clazz.getDeclaredConstructor();`
+- 通过构造方法实例化对象：`Object o = constructor.newInstance();`
+- 获取 public 修饰的成员方法：`Method getA = clazz.getMethod("getA");`
+- 获取某个成员方法：`Method getA = clazz.getDeclaredMethod("getA");`
+- 调用成员方法，参数为指定执行的是哪个对象：`getA.invoke(o);`
+
+
+
+以下是修改 final 修饰变量的反射代码，可以修改成功
+
+```java
+class A{
+    final int a = 4;
+    private A(){}
+    public int getA(){
+        return a;
+    }
+    public static void main(String[] args) throws ClassNotFoundException, NoSuchFieldException, IllegalAccessException, NoSuchMethodException, InvocationTargetException, InstantiationException {
+        Class<?> clazz = Class.forName("cn.oy.A");
+        
+        //获取构造方法
+        Constructor<?> constructor = clazz.getDeclaredConstructor();
+        //实例化对象
+        Object o = constructor.newInstance();
+        
+        //获取要访问的变量
+        Field a = clazz.getDeclaredField("a");
+        //由于 final / private 修饰，所以需要修改权限
+        a.setAccessible(true);
+        //修改值，指定修改的是哪个对象的 a 值
+        a.set(o, 5);
+        //指定获取的是哪个对象的 a 值
+        System.out.println(a.get(o));	//输出 5，表示修改成功
+    }
+}
+```
+
+
+
+
+
+
+

@@ -419,5 +419,127 @@ class A{
 
 
 
+## 8、sleep() 和 wait() 的区别
 
+sleep() 是 Thread 的静态方法，随时可以 进行调用，`Thread.sleep()`，它跟线程是否持有锁的状态无关，它不需要锁，调用后线程会挂起，如果持有锁的话也不会释放锁，因为说了跟锁无关，只是挂起后不会跟其他的线程争夺 CPU
+
+
+
+wait() 是Object 的方法，它是一个实例方法，任何对象都相当于是继承了父类 Object 的这个方法，直接 wait() 进行调用即可，但是 wait() 跟锁挂钩，它需要配合 syn 锁使用，当调用后会释放锁
+
+
+
+它们都需要 捕获 中断异常，因为它们都可以被 线程的 interrupt()  方法打断，并且抛出中断异常
+
+```java
+public void h(){
+    Thread thread = new Thread(() -> {
+        synchronized (this) {
+            try {
+                wait();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    });
+    thread.start();
+    thread.interrupt(); //可以打断 wait
+}
+
+
+public void h(){
+    Thread thread = new Thread(() -> {
+        try {
+            Thread.sleep(1100);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    });
+    thread.start();
+    thread.interrupt(); //可以打断 sleep
+}
+```
+
+
+
+
+
+## 9、单例模式
+
+> ### 单例模式是什么？
+
+单例：某个类的对象在堆内存中有且仅存在一个，即一个类的对象只会创建一次在内存中，被多个线程复用
+
+主要是用于某个类作用一样，且防止被重复创建来占用内存
+
+
+
+> ### 单例模式的两种类型
+
+懒汉式：跟字面意思一样，很懒，只有在用到的适合才创建单例对象
+
+饿汉式：跟字面意思一样，很饿，饥渴，能有多快创建就多快创建，在类加载的时候就创建了单例对象
+
+
+
+比如之前讲 volatile 和 syn 的时候，就写了一个单例模式，就是使用的 懒汉式-双重检查
+
+```java
+class Singleton{
+    private volatile static Singleton instance = null;
+    
+    private Singleton(){}
+    
+    public static Singleton getInstance(){
+        if(instance == null){
+        	//锁住整个类
+            synchronized(Singleton.class){
+                if(instance == null){
+                    instance = new Singleton();
+                }
+            }
+        }
+        return instance;
+    }
+}
+```
+
+
+
+还有一种懒汉式-静态内部类
+
+静态内部类跟外部类没什么关系，外部类加载的时候静态内部类并不会加载，只有主动调用它的时候才会加载
+
+这个不加锁怎么保证创建的对象唯一？因为静态变量具有唯一性，底层保证的
+
+```java
+class Singleton{
+    
+    private Singleton(){}
+    
+    private static class SingletonHolder{
+        private static final  Singleton instance = new Singleton();
+    }
+    public static Singleton getInstance(){
+        return SingletonHolder.instance;
+    }
+}
+```
+
+
+
+饿汉式的话，就是使用的内部类的形式，静态内部类，类加载的初始化阶段给静态变量赋用户的给定的值，这时候是线程安全的，可以用来创建实例对象
+
+```java
+class Singleton{
+    //注意：构造方法私有化是只能在类内部使用
+    private static final Singleton instance = new Singleton();
+    
+    private Singleton(){}
+    
+    public static Singleton getInstance(){
+        return instance;
+    }
+}
+```
 

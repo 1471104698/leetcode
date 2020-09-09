@@ -349,77 +349,7 @@ A printB
 
 
 
-## 7、反射可以修改 final 修饰的值
-
-> ### 前置知识点
-
-主要 API：
-
-- 成员变量：Field
-- 成员方法：Method
-- 构造方法：Constructor
-
-获取 Class 对象的方式：
-
-- 类`.class`
-- `Class.forName()`
-- 实例对象`.getClass()`
-
-获取成员变量以及进行修改
-
-- 获取 public 修饰的所有成员变量：`clazz.getFields()`
-- 获取 public 修饰的指定的某个成员变量：`clazz.getField(String name);`
-- 获取所有成员变量：`clazz.getDeclaredFields()`
-- 获取某个指定的成员变量：`clazz.getDeclaredField(String name)`
-- 设置某个成员变量的修改权限（比如 final 修饰）：`field.setAccessible(true);`
-
-获取对象的成员方法
-
-- 获取 public 修饰的所有构造方法：`clazz.getConstructors();`
-- 获取 public 修饰的某个构造方法，没有参数就是无参：`clazz.getConstructor();`
-- 获取所有构造方法：`clazz.getDeclaredConstructors();`
-- 获取某个构造方法，一般是无参：`clazz.getDeclaredConstructor();`
-- 通过构造方法实例化对象：`Object o = constructor.newInstance();`
-- 获取 public 修饰的成员方法：`Method getA = clazz.getMethod("getA");`
-- 获取某个成员方法：`Method getA = clazz.getDeclaredMethod("getA");`
-- 调用成员方法，参数为指定执行的是哪个对象：`getA.invoke(o);`
-
-
-
-以下是修改 final 修饰变量的反射代码，可以修改成功
-
-```java
-class A{
-    final int a = 4;
-    private A(){}
-    public int getA(){
-        return a;
-    }
-    public static void main(String[] args) throws ClassNotFoundException, NoSuchFieldException, IllegalAccessException, NoSuchMethodException, InvocationTargetException, InstantiationException {
-        Class<?> clazz = Class.forName("cn.oy.A");
-        
-        //获取构造方法
-        Constructor<?> constructor = clazz.getDeclaredConstructor();
-        //实例化对象
-        Object o = constructor.newInstance();
-        
-        //获取要访问的变量
-        Field a = clazz.getDeclaredField("a");
-        //由于 final / private 修饰，所以需要修改权限
-        a.setAccessible(true);
-        //修改值，指定修改的是哪个对象的 a 值
-        a.set(o, 5);
-        //指定获取的是哪个对象的 a 值
-        System.out.println(a.get(o));	//输出 5，表示修改成功
-    }
-}
-```
-
-
-
-
-
-## 8、sleep() 和 wait() 的区别
+## 7、sleep() 和 wait() 的区别
 
 sleep() 是 Thread 的静态方法，随时可以 进行调用，`Thread.sleep()`，它跟线程是否持有锁的状态无关，它不需要锁，调用后线程会挂起，如果持有锁的话也不会释放锁，因为说了跟锁无关，只是挂起后不会跟其他的线程争夺 CPU
 
@@ -462,9 +392,19 @@ public void h(){
 
 
 
+> ### wait(1000)与sleep(1000)的区别
+
+sleep(1000) 表示将线程挂起，在未来的 1000ms 内不参与竞争 CPU，在 1000ms 后，会取消挂起状态，参与竞争 CPU ，这时不一定 CPU 就立马调度它，因此它等待的时间的 >= 1000ms
 
 
-## 9、单例模式
+
+wait(1000) 跟 wait() 的差别在于 wait(1000) 不需要 notify() 来唤醒，它等待 1000ms 后，如果此时没有线程占有锁，那么它会自动唤醒获取锁 
+
+
+
+
+
+## 8、单例模式
 
 > ### 单例模式是什么？
 
@@ -541,5 +481,159 @@ class Singleton{
         return instance;
     }
 }
+```
+
+
+
+
+
+## 9、反射
+
+> ### 前置知识点
+
+主要 API：
+
+- 成员变量：Field
+- 成员方法：Method
+- 构造方法：Constructor
+
+获取 Class 对象的方式：
+
+- 类`.class`
+- `Class.forName()`
+- 实例对象`.getClass()`
+
+获取成员变量以及进行修改
+
+- 获取 public 修饰的所有成员变量：`clazz.getFields()`
+- 获取 public 修饰的指定的某个成员变量：`clazz.getField(String name);`
+- 获取所有成员变量：`clazz.getDeclaredFields()`
+- 获取某个指定的成员变量：`clazz.getDeclaredField(String name)`
+- 设置某个成员变量的修改权限（比如 final 修饰）：`field.setAccessible(true);`
+
+获取对象的成员方法
+
+- 获取 public 修饰的所有构造方法：`clazz.getConstructors();`
+- 获取 public 修饰的某个构造方法，没有参数就是无参：`clazz.getConstructor();`
+- 获取所有构造方法：`clazz.getDeclaredConstructors();`
+- 获取某个构造方法，一般是无参：`clazz.getDeclaredConstructor();`
+- 通过构造方法实例化对象：`Object o = constructor.newInstance();`
+- 获取 public 修饰的成员方法：`Method getA = clazz.getMethod("getA");`
+- 获取某个成员方法, 不能包括继承的方法：`Method getA = clazz.getDeclaredMethod("getA");`
+- 调用成员方法，参数为指定执行的是哪个对象：`getA.invoke(o);`
+
+
+
+> ### 可以修改 final 和 private 修饰的值
+
+
+
+```java
+public class Reflect {
+    private final int a = 1;
+    private int getA(){
+        return a;
+    }
+    private Reflect(){}
+}
+class C{
+    public static void main(String[] args) throws ClassNotFoundException, IllegalAccessException, InvocationTargetException, InstantiationException, NoSuchFieldException, NoSuchMethodException {
+        Class<?> clazz = Class.forName("cur.Reflect");
+        Constructor<?> constructor = clazz.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        Object o = constructor.newInstance();
+
+        Field a = clazz.getDeclaredField("a");
+        a.setAccessible(true);
+        a.set(o, 2);
+		
+        Method getA = clazz.getDeclaredMethod("getA");
+        getA.setAccessible(true);
+        
+        //通过 getA() 方法获取 a 值
+        System.out.println(getA.invoke(o, null));   // 1
+        //直接获取 a 值
+        System.out.println(a.get(o));   // 2
+    }
+}
+```
+
+上面我们可以发现，直接 变量 a 的值 和 通过 getA() 方法获取变量 a 的值，结果不一样
+
+直接获取的是 修改后的值，通过方法获取的是修改前的值
+
+这是因为 a 变量使用 final 修饰，在编译的时候编译器将它当作常量，直接在 getA() 方法的指令里返回 1，即 getA() 在指令中是写死返回 1 的
+
+
+
+> ### 反射获取方法参数类型、参数名
+
+
+
+```java
+public class Reflect {
+    public void h(int a, int b, int c){
+        System.out.println("nothing");
+    }
+}
+class C{
+    public static void main(String[] args) throws Exception {
+        Class<?> clazz = Class.forName("cur.Reflect");
+        Constructor<?> constructor = clazz.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        Object o = constructor.newInstance();
+
+        Method[] methods = clazz.getDeclaredMethods();
+        for(Method method : methods){
+            System.out.println("方法名：" + method.getName());
+            System.out.println("返回类型：" + method.getReturnType());
+            System.out.println("方法修饰符的标识符：" + method.getModifiers());
+            for (Class<?> pType  : method.getParameterTypes()) {
+                System.out.println("方法参数类型：" + pType.getName());
+            }
+            for (Parameter parameter : method.getParameters()) {
+                System.out.println("方法参数名称：" + parameter.getName());
+            }
+        }
+    }
+}
+```
+
+输出结果为：
+
+```java
+方法名：h
+返回类型：void
+方法修饰符的标识符：1
+方法参数类型：int
+方法参数类型：int
+方法参数类型：int
+方法参数名称：arg0
+方法参数名称：arg1
+方法参数名称：arg2
+```
+
+可以看出，反射可以获取到方法名、方法类型、方法修饰符（1 表示 public）、方法参数类型
+
+但是对应的具体参数名称，却是反射过程中自动生成的 `argx`，没有真正获取到参数名称
+
+
+
+在 JDK 8 中，增加了 Parameter 类，可以获取 Method 的所有参数，其他参数可以正常获取，但是 参数名称需要在编译时做处理，添加 -parameters 参数即可
+
+![1599538401846](C:\Users\蒜头王八\AppData\Roaming\Typora\typora-user-images\1599538401846.png)
+
+添加完参数后，输出结果：
+
+```java
+方法名：h
+返回类型：void
+方法修饰符的标识符：1
+方法参数类型：int
+方法参数类型：int
+方法参数类型：int
+方法参数名称：a
+方法参数名称：b
+方法参数名称：c
 ```
 

@@ -466,3 +466,142 @@ new 这种的话会使得 静态和非静态 都进行初始化
 
 
 
+
+
+## 6、OOM 内存溢出 和 内存泄漏
+
+> ### OOM
+
+程序计数器是线程私有的，是唯一一个不会出现 OOM 的区域
+
+而 堆、虚拟机栈、方法区、本地方法区 都有可能会出现 OOM
+
+
+
+堆 OOM：堆是线程共享的，当一个线程为一个对象申请分配内存的时候，如果堆内存空间不够，就会触发 GC，如果 GC 之后还是无法分配，那么就会产生 堆 OOM
+
+栈 OOM 和 本地方法栈 OOM：栈是线程私有的，存储的是方法调用链中的每个栈帧，它有一定的大小，即调用的方法数是有限的
+
+- 如果像递归或者死循环一直调用方法，那么会占满虚拟机栈，无法再调用方法，后续方法调用就会出现 StackOverflowError 
+- 创建线程，由 native 方法代理，向操作系统请求创建一个 native 线程，如果操作系统无法为这个方法分配内存，那么就会产生 OOM**（Unable to create new native thread）线程占用的是栈内存**
+
+方法区 OOM：方法区是存储类的元数据 、静态变量、常量池之类的，它的大小也是有限的，如果加载过多的类，再加载新的类的时候无法分配空间，那么就会产生 方法区 OOM
+
+运行时常量池 OOM：运行时常量池是位于方法区的，在运行过程中的 Integer、String 常量之类的都会放入这个常量池，它也是有空间大小的，如果常量太多会导致 方法区 OOM	(**可以算作是方法区 OOM 的一种**)
+
+
+
+> ### 内存泄漏
+
+**JVM 对内存进行全权管理，从自动分配到垃圾回收，为什么还会发生内存泄漏？**
+
+java 方面的内存泄漏跟 C 的内存泄漏不太一样，C 由于不存在 JVM 的自动垃圾回收，因此每次都需要手动释放对象，而如果在没有释放对象前就失去了对这个对象的引用，那么这个对象就无法被释放，会一直占用内存，这就导致内存泄漏
+
+比如下面这段代码
+
+```C
+for(i=0; i<N; i++) {
+    p = malloc(4096);
+    p = malloc(4096);
+    free(p);
+}
+```
+
+对于第一个 malloc 的内存，没有释放就失去了引用，这就导致内存泄漏
+
+
+
+而由于 java 存在 JVM，会对没有引用的对象进行回收，所以很难出现 C 层面的内存泄漏
+
+所以对于 java 的内存泄漏来说，就是反过来的，已经使用完了某个对象，但是仍然留着对它的引用，导致 JVM 无法进行回收，占用着内存空间
+
+比如下面这段代码
+
+```java
+class stack {
+    Object[] data = new Object[1000];
+    int top = -1;
+
+    public void push(Object o) {
+        top++;
+        data[top] = o;
+    }
+
+    public Object pop(Object o) {
+        top--;
+        return data[top + 1];
+    }
+}
+
+```
+
+对于 push 进去的元素， pop 的时候并没有失去对它的引用，而是简单的对 top 指针进行变化
+
+这样的话， pop 后的栈顶对象已经使用完了，但是 data 数组还留着对它的引用，导致它无法被垃圾回收
+
+只能等到 push 到该位置时，使用一个新的元素来代替 data 对它的引用，它才能被 JVM 回收
+
+而如果 push 了 1000 个元素，然后再 pop 1000 个元素，那么这时宏观上来看 data 中是不存在任何元素的
+
+**但是，实际上 data 并没有放弃对那 1000 个元素 的引用，这样的话这 1000 个元素不会被 JVM 回收，也不会被再次使用，相当于是垃圾堆放在了内存空间中，这样就导致了内存泄漏，进一步可能会导致 内存溢出**
+
+
+
+同时，内存泄漏还有各种情况，都是使用完了没有放弃引用而导致无法被 JVM 回收的：
+
+- 流 stream 使用完没有调用 close()，这样内部还在运行，就不会被垃圾回收
+- 未关闭连接，比如数据库连接，connection 后，使用完了没有调用 close()，跟上面的 stream 类似
+
+
+
+> ### 一个线程 OOM 会对同进程的其他线程的运行产生影响吗？
+
+执行代码：
+
+```java
+public class A{
+    public static void main(String[] args) {
+        A a = new A();
+        new Thread(a::h1).start();
+        new Thread(a::h2).start();
+    }
+
+    public void h1() {
+        while(true){
+            int[] a = new int[1000000000];
+        }
+    }
+    public void h2()  {
+        System.out.println(1);
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.out.println(2);
+    }
+}
+```
+
+
+
+输出结果：
+
+```java
+1
+Exception in thread "Thread-0" java.lang.OutOfMemoryError: Java heap space
+	at cur.A.h1(A.java:19)
+	at cur.A$$Lambda$1/2003749087.run(Unknown Source)
+	at java.lang.Thread.run(Thread.java:745)
+2
+```
+
+
+
+我们可以发现，一个线程 OOM，不会对其他线程的运行产生影响，因为一个线程 OOM，一般是因为堆栈内存不足，OOM 发生后产生 GC 回收掉该线程的资源
+
+如果是栈 OOM，由于栈是线程私有的，所以对其他线程不产生影响
+
+如果是堆 OOM，如果在 GC 前，其他线程没有进行对象分配，或者 对象分配时内存空间足够， 那么就不会产生任何影响
+
+如果其他线程进行内存分配而空间又不足时，就会导致该线程也 OOM 了

@@ -638,10 +638,7 @@ ConcurrentHashMap<Integer, Integer> map = new ConcurrentHashMap<>();
 map.put(1, 1);
 map.put(2, 1);
 map.put(3, 1);
-for(Map.Entry<Integer, Integer> entry : map.entrySet()){
+for(Map.Entry<Integer, Integer> entry : map.entrySet(){
     map.remove(entry.getKey());
 }
 ```
-
-
-

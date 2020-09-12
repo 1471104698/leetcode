@@ -729,3 +729,17 @@ id 是普通索引，因此会出现重复值，即会存在多条数据
 跟 RC 一样走聚簇索引的全表扫描，如果进行的是当前读，那么会锁上所有的叶子节点，并且给所有的数据行加上间隔锁，以此来避免幻读，后面再将不满足条件的叶子节点上的锁去掉
 
  ![img](https://pic1.zhimg.com/80/v2-71ce022c81c16ddf8ad3503d85dc61e2_720w.jpg) 
+
+
+
+
+
+## 7、InnoDB 和 mysiam 引擎的区别
+
+InnoDB 和 mysiam 都是 mysql 的存储引擎，一个 database 中的多张表可以设置不同的存储引擎
+
+- InnoDB 支持事务，mysiam 不支持事务，InnoDB 每次都需要将 sql 语句封装进事务里来保证原子性，通过 undo log 和 redo log 保证回滚 和 数据延迟写回磁盘，保证数据库出现事故重启能够快速进行数据恢复
+- InnoDB 支持外键，而 mysiam 不支持，带有外键的 InnoDB 表无法转换为 mysiam
+- InnoDB 支持表锁和行锁，而 mysiam 只支持表锁，因此 InnDB 在当前读方面效率更高，因为并发度高
+- InnoDB 和 mysiam 索引数据结构都是 B+ 树，但是 InnoDB 有 聚簇索引 和 非聚簇索引两种，而 mysiam 只有 非聚簇索引，即 InnoDB 的聚簇索引文件就相当于是数据文件，而 mysiam 的 索引文件 和 数据文件是分开的，所有的索引树的叶子节点不存储完整数据行，而是存储该数据行在数据文件中的物理地址
+- InnoDB 调用 select count(*) from t 来统计表中数据行数的时候需要全表扫描，而 mysiam 内部维护了一个字段就是表中数据行，直接调用就可以获取表中数据行，这也侧面说明了 mysiam 主要是用来查询的，因为 insert delete 操作都需要修改这个字段

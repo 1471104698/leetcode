@@ -230,11 +230,31 @@ AQS 有一个头节点 head，它单纯的作为一个 dummy 指针，不存储�
 
 
 
-## 3、ReentrantLock（CAS + AQS）
+## 3、ReentrantLock
 
-ReentrantLock 内部类继承了 AQS，同时重写了 AQS 的 tryAcquire() 和 tryRelease() 方法，通过重写这两个方法，制定了这两个方法所代表的含义：获取锁 和 释放锁
+**ReentrantLock = AQS + tryAcquire() + tryRelease()**
+
+ReentrantLock 的一个内部类 Sync继承了 AQS，同时重写了 AQS 的 tryAcquire() 和 tryRelease() 方法，通过重写这两个方法，制定了这两个方法所代表的含义：获取锁 和 释放锁
 
 并且 ReentrantLock 内部自己定义了两个方法 lock() 和 unlock() ，其实这两个方法内部调用的是 tryAcquire() 和 tryRelease() ，只是通过 lock() 和 unlock() 将它们封装起来，使得看起来更像是一把锁而已
+
+
+
+> ### 公平锁 和 非公平锁 实现类
+
+```java
+//ReentrantLock 内部建立了一个内部类 Sync，它继承了 AQS
+abstract static class Sync extends AbstractQueuedSynchronizer {
+
+//非公平锁就是一个 NonfairSync 类继承 Sync
+static final class NonfairSync extends Sync {
+        
+//公平锁就是一个 FairSync 类继承 Sync
+static final class FairSync extends Sync {
+    
+//ReentrantLock 内部维护了一个 Sync 类型的字段，通过传参确定 sync 引用的是公平锁对象还是非公平锁对象，后续都是使用这个 sync 进行操作
+    private final Sync sync;	
+```
 
 
 

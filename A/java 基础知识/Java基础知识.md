@@ -809,3 +809,109 @@ System.out.println("a".hashCode()); //97
 System.out.println("00".hashCode()); //1536
 ```
 
+
+
+
+
+## 11、String 为什么设计为不可变和不可继承
+
+> ### 什么是不可变？
+
+所谓的不可变，就是一个类的实例创建完成后，不能再修改它的成员变量值
+
+
+
+> ### String 为什么不可变
+
+String 类源码如下：
+
+```java
+public final class String implements java.io.Serializable, Comparable<String>, CharSequence {
+    private final char value[];
+```
+
+String 内部封装了一个 char[] 数组，String 对应的数据就是存储在这个 char[] 数组中的
+
+这个 char[] 数组使用 final 修饰，这样就导致了不能将 char[] 数组 引用变量 重新指向新的引用
+
+
+
+我们需要知道，final 修饰的变量，指针变量不能够发生改变，但是它内部的值可以发送改变，比如
+
+```java
+final char[] chs = {'a', 'b'};
+chs[0] = 'b'; //这是可以的
+chs = new char[2]; //这是不可以的
+```
+
+
+
+既然 char[] 内部的值可以改变，那么为什么不直接修改呢？因为 char[] 数组使用 private 修饰，我们外面无法访问到，这就导致了 String 的不可变的特性，如果是 public 的，那么我们可以直接获取 char[] 然后修改它的值了
+
+
+
+> ### String 为什么设计为 不可变
+
+**为了安全**
+
+因为字符串是最常用的，而它也经常作为方法参数进行传参，在方法内部不可避免的会修改字符串的值，这就是问题所在
+
+与之对应的是 StringBuilder 和 StringBuffer
+
+有如下代码
+
+```java
+class A{
+    public void static main(Stirng[] args){
+        String a = "abc";
+        StringBuilder sb = new StringBuiler{"abc};
+        h1(a);
+        h2(sb);
+        System.out.println(a);
+        System.out.println(sb.toString());
+    }
+    public static void h1(String a){
+        a += "aa";
+    }
+    public static void h2(StringBuilder sb){
+        sb.append("aa");
+    }
+}
+```
+
+我们可以发现，a 的值没有发生改变，而 sb 的值发生了改变了
+
+很多时间，我们并不希望 字符串的值发生改变，而仅仅只是将它作为一个参数传进方法内给它使用而已
+
+如果它是可变的，那么在方法内很可能发生改变，但是却没有被注意到
+
+```java
+比如之前我做的一道二叉树的题目，求根到叶子节点的路径值，节点值都是字符，所以需要使用 StringBuilder，方便回溯，而当时忘了将添加值删掉，导致错误，而如果直接使用 String 的话，就无需去考虑删值了，不过效率会降低
+```
+
+
+
+并且 String 借助这个不可变性还有一个常量池属性，即它可以添加到常量池中，被多个引用进行复用，而不用创建重复的对象，节省空间 
+
+如果可变，那么这个就失去了意义了，因为这个值随时可能被改变，这样就会影响到其他的引用
+
+
+
+> ### String 为什么不可继承
+
+同样是这个源码
+
+```java
+public final class String implements java.io.Serializable, Comparable<String>, CharSequence {
+    private final char value[];
+```
+
+String 类使用 final 修饰，表示该类不可被继承
+
+
+
+> ### String 为什么设计为不可继承
+
+设置为不可继承，那么方法就不能被重写，这样才通用，**主要是 String 是一个基础类，很多的类都使用了 String**
+
+如果用户的一个类继承 String 重写了 String 的方法，那么在其他类中本来是传入 String，使用的是 String 的方法逻辑的，却传入了用户自己写的类，导致对应的方法逻辑出现问题

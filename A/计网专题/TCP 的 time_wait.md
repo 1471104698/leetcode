@@ -19,7 +19,7 @@
 
 ![image.png](https://pic.leetcode-cn.com/1597979904-bDiuAM-image.png)
 
-### 
+
 
 > ### 原因二：保证连接正常关闭
 
@@ -77,7 +77,7 @@
 
 1、使用长连接
 
-2、缩减 MSL 的时间
+2、缩减 TIME_WAIT 的时间
 
 
 

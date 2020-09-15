@@ -204,7 +204,36 @@ System.out.println(f2 == d2); // false
 
 
 
-## 3、String str = new String(`"abc"`) 创建了多少个对象
+## 3、new String() 创建了多少个对象
+
+> ### 前置知识
+
+```java
+String str = "a" + "b"
+```
+
+"a" + "b" 在编译期间就可以直接确定结果是 "ab" 了，因此直接存储进常量池
+
+
+
+```java
+String b = "b";
+String str = "a" + b;
+```
+
+b 是符号引用，会调用 StringBuilder 进行 append 拼接，再调用 toString() 转换为字符串
+
+
+
+如果全部是字符串常量拼接，那么生成的对象只有一个常量池对象
+
+如果存在变量拼接，那么生成的对象有 一个 StringBuilder 和 一个 String
+
+一般情况下，我们都是忽略 StringBuilder 这个对象，下面的分析也是如此
+
+
+
+> ### 情况1
 
 ```java
 String s1 = new String("abc");
@@ -212,33 +241,108 @@ String s2 = "abc";
 System.out.println(s1 == s2); //false
 ```
 
-当常量池中不存在 `abc` 这个字符串时，那么 `new String("abc")` 创建了两个对象，一个存放在常量池中，一个存放在 堆内存中
+new String("abc") 的时候，字符串常量池中不存在 abc，因为创建一个，然后再在堆中创建一个，返回的是对堆中对象的引用
 
-然后 s1 指向了堆中的对象，s2 指向常量池中的对象
-
-
-
-```java
-String s1 = "abc";
-String s2 = "abc";
-System.out.println(s1 == s2); //true
-```
-
-只创建了一个对象，存放在常量池中，s1 和 s2 指向的都是常量池中的对象
+后面 s2 指向的是对常量池对象的引用，所以为 false
 
 
+
+> ### 情况2
 
 ```java
 String s1 = "a" + "bc";
-String s2 = "abc";
-System.out.println(s1 == s2); //true
 ```
 
-如果常量池中不存在 `a` `bc` `abc` 这3 个字符串时，那么创建了 3 个对象，都在常量池中
-
-然后 s1 和 s2 都指向了常量池中的对象
+这里有点特殊，字符串常量池并不会 "a" 和 “bc”，只会创建 "abc"，因此最终在字符串常量池中只存在 "abc"
 
 
+
+证明如下：
+
+```java
+//常量池中有 aab，但不知道有没有 aa 和 b
+String str = "aa" + "b";
+String str1 = new String("a") + new String("a");
+System.out.println(str1.intern() == str1);	//true
+```
+
+如果 str 拼接的时候会在字符串常量池中创建 "aa" 和 "b"，那么 str1.intern() 获取到的应该是原来创建的常量池该对象的引用
+
+那么意味 str1.intern() 和 str1 指向就是不同的内存地址，应该返回 false,但是实际上返回的是 true，表示没有创建 "aa" 和 "b"
+
+
+
+```java
+//常量池中有 aab，但不知道有没有 aa 和 b
+String b = "b";
+String str = "aa" + b;
+String str1 = new String("a") + new String("a");
+System.out.println(str1.intern() == str1);	//false
+```
+
+当拼接存在 变量，那么常量池就会创建 "aa"，所以 str1.intern() 获取的就是原来创建的对象的引用
+
+所以导致 str1.intern() 和 str1 的内存地址不同，所以返回了 false
+
+
+
+
+
+> ### 情况3
+
+```java
+String str = "bc"
+String str1 = "a" + str;
+```
+
+这里由于 str 是引用变量，所以在编译期间不会转换，而字符串常量池会创建 "a" 和 "bc"
+
+所以只要 拼接的字符串中，存在引用变量，那么字符串常量池就会进行存储
+
+
+
+> ### 情况4
+
+```java
+String str = new String("a") + new String("b");
+String str = new String("a" + "b");
+```
+
+第一条语句会在字符串常量池中创建 a 和 b，在堆中创建 a 和 b 和 ab
+
+第二条语句会在字符串常量池 和 堆中 都创建 ab
+
+
+
+> ### 情况5
+
+```java
+String s1 = “abc”;
+String s2 = “a”;
+String s3 = “bc”;
+String s4 = s2 + s3;
+System.out.println(s1 == s4); //false
+```
+
+常量池中创建了 a、bc、abc
+
+s2 和 s3 虽然在编译期间可以确定，但是存在符号引用，编译器不会在编译期间去替换掉这些引用，导致 s4 在编译期间不能确定而不会放入常量池，并且后续是使用 StringBuilder 进行拼接然后调用 toString() 创建一个新的对象返回的
+
+
+
+> ### 情况6
+
+```java
+String s1 = “abc”;
+final String s2 = “a”;
+final String s3 = “bc”;
+String s4 = s2 + s3;
+System.out.println(s1 == s4);	//true
+```
+
+由于 s2 和 s3 用 final 修饰，所以表示值不会改变，编译器在编译期间会将所有使用 s2 和 s3 的地方全部替换为真实值，而不是引用，这样的话就导致 s4 在编译期间确定了，和 s1 指向常量池中同一个对象
+
+如果 s2 和 s3 中任意一个去掉 final，这样也会导致 s4 不在编译期间确定
 
 
 
@@ -915,3 +1019,459 @@ String 类使用 final 修饰，表示该类不可被继承
 设置为不可继承，那么方法就不能被重写，这样才通用，**主要是 String 是一个基础类，很多的类都使用了 String**
 
 如果用户的一个类继承 String 重写了 String 的方法，那么在其他类中本来是传入 String，使用的是 String 的方法逻辑的，却传入了用户自己写的类，导致对应的方法逻辑出现问题
+
+
+
+
+
+## 12、try-catch-finally 和 return
+
+> ### finally 代码块什么时候不会执行
+
+- 在 try 代码块前就进行 return
+- 在 try 代码块中有 System.exit(0)，这个代码是退出 JVM 的，JVM 退出了，肯定就不能执行了
+
+
+
+> ### finally 执行的各种情况
+
+
+
+**1、finally 中 没有 return 语句**
+
+```java
+public class A{
+    public static void main(String[] args) {
+        System.out.println(h());
+    }
+    private static int h(){
+        try {
+            return 1;
+        } finally {
+            System.out.println("finally");
+        }
+    }
+}
+```
+
+输出结果：
+
+```java
+finally
+1
+```
+
+即如果在 try 中 return 了，也会执行完 finally 中的语句再 return
+
+
+
+**2、finally 中有 return 语句**
+
+```java
+public class A{
+    public static void main(String[] args) {
+        System.out.println(h());
+    }
+    private static int h(){
+        try {
+            return 1;
+        } finally {
+            System.out.println("finally");
+            return 2;
+        }
+    }
+}
+```
+
+输出结果：
+
+```java
+finally
+2
+```
+
+即如果 try 和 finally 中都有 return ，那么执行的是 finally 中的 return，
+
+那么 try 中的 return 有没有执行呢？是执行了被覆盖了 还是 压根没有执行？
+
+
+
+**3、try 和 finally 都有 return，并且 try 的 return 进行表达式运算**
+
+```java
+public class A{
+    public static void main(String[] args) {
+        System.out.println(h());
+    }
+    private static int h(){
+        int i = 0;
+        try {
+            return i += 2;
+        } finally {
+            System.out.println("finally");
+            return i;
+        }
+    }
+}
+```
+
+输出结果：
+
+```java
+finally
+2
+```
+
+表示 try 中的 return 有执行，只不过 最终方法 return 被 finally 的 return 覆盖了
+
+那么如果 finally 没有 return ，在 try 中有 return，那么在 finally中做的修改的值会映射到 try 的 return 么？
+
+
+
+**4、try 有 return ，finally 没有 return, finally 修饰 try return 的值**
+
+```java
+public class A{
+    public static void main(String[] args) {
+        System.out.println(h());
+        System.out.println(h1().get("key"));
+    }
+    private static int h(){
+        int i = 0;
+        try {
+            return i;
+        } finally {
+            i += 2;
+        }
+    }
+    private static Map<String, String> h1(){
+        Map<String, String> map = new HashMap<>();
+        try {
+            map.put("key", "try");
+            return map;
+        } finally {
+            map.put("key", "finally");
+        }
+    }
+}
+```
+
+输出结果：
+
+```java
+0
+finally
+```
+
+可以看出如果是值传递的话， finally 的修改不会映射到 try 上
+
+如果是引用传递的话，finally 的修改会映射到结果上，当然，前提是 return 的是引用传递的类型
+
+那么在 try-catch-finally 外面的 return 就没有什么作用了么？
+
+
+
+**5、try-catch-finally 的 return**
+
+```java
+public class A{
+    public static void main(String[] args) {
+        System.out.println(h());
+    }
+    private static int h(){
+        try {
+            int i = 1 / 0;
+            return 1;
+        }catch (Exception e){
+            e.printStackTrace();
+            //return 3;
+        }finally {
+			//return 2;
+        }
+        return 3;
+    }
+}
+```
+
+输出结果：
+
+```java
+java.lang.ArithmeticException: / by zero
+	at cur.A.h(A.java:19)
+	at cur.A.main(A.java:15)
+3
+```
+
+即如果 try 在没有 return 前发生了异常，并且进行了 catch，那么就不会执行 try 的 return，这时 return 有几种情况了：
+
+- finally 中没有 return
+  - catch 中没有 return，那么就会执行 外面的 return
+  - catch 中有 return，那么就会执行 catch 的 return
+- finally中有 return
+  - catch 中有 return，先执行 catch 的 return，然后再执行 finally 的 return
+  - catch 中没有 return，那么直接执行 finally 的 return,不会执行外面的 return
+
+
+
+
+
+综上，finally 是负责断后的，即无论是 try 正常执行 还是 发生异常后 catch ，finally 都是在最后执行
+
+并且 return 最后是 finally 的 return 有效，但是 try 和 catch 的也会执行，不过不会返回
+
+外面的 return 能够执行的必要条件就是 finally 没有 return，并且 try 正常执行的情况下没有 return，异常情况下 catch 中没有 return
+
+
+
+
+
+## 13、Java 的线程状态
+
+初始化状态（NEW）：线程刚创建
+
+可运行状态（Runnable）：等待 CPU 调度 - 
+
+运行状态（Running）：被 CPU 调度
+
+阻塞状态（Blocking）：线程因为某种原因停止 CPU 调度，暂时停止运行，直到事件解决后才会重新进入 可运行状态 等待 CPU 调度
+
+- 等待阻塞：调用 wait()，线程进入 等待阻塞状态，需要调用 notify()  或者 interrupt() 对其唤醒或者中断
+- 同步阻塞：等待获取锁
+- 其他阻塞：调用 sleep()、join()、磁盘 IO、键盘输入
+
+死亡状态（dead）：线程因异常或者 执行完成 退出 run() 
+
+![img](https://pic3.zhimg.com/80/v2-e55996045c7a1a0d669b7308824fe2c9_720w.jpg)
+
+
+
+## 14、异常（Exception）和 错误（Error）
+
+> ### 异常（Exception）和 错误（Error）
+
+**异常 和 错误 都继承自 Throwable**
+
+异常（Exception）则是程序发生的 错误，比如  i /= 0， IO 异常 等，这种是可控的
+
+错误（Error）则是硬件方面的错误， 比如 OOM 等，这种程序员是无法控制的，当出现 OOM 时 JVM 会终止当前线程
+
+
+
+try-catch-finally 是异常相关的三件套
+
+**try** 用来监听内部代码段
+
+**catch** 用来捕获 try 内部出现的异常，一旦出现异常就中止 try 的继续执行，然后对异常进行处理
+
+**finally** 用于做收尾工作，比如 关闭流等
+
+
+
+**非运行时异常：**IOException、SQLException，这种在编译的时候就强制要求进行 try-catch 或者 throws
+
+**运行时异常：**即只有程序运行时才会发生的异常，一般是由于程序的逻辑产生的，比如 i /= 0 这种，或者 空指针异常
+
+
+
+**当发生异常我们不进行 catch 处理，而是一层层往上抛，如果最终到达子线程的 run() 或者 主线程的 main() 还是没有处理，那么就会交给 JVM 进行处理，一旦 JVM 进行处理，那么就会终止线程**
+
+
+
+> ### throw 和 throws
+
+throw 是运行在 函数内部的，表示抛出一个异常，想什么时候抛就什么时候抛，可以位于方法的任意一个位置
+
+throws 是位于方法声明上的，表示这个方法随时可能会出现异常，并且没有进行处理，需要调用该方法的方法进行处理
+
+当调用 throw 抛出一个异常的时候，必须在方法上使用 throws 声明该异常类
+
+throw 后面跟的是异常的实例，throws 后面跟的是异常的类型
+
+```java
+public class A{
+    public static void main(String[] args) throws Exception {
+        try {
+            h();
+        } catch (Exception e) {
+            throw new Exception();	//一般是在 catch 中抛出异常
+        }
+        System.out.println(1);
+        throw new Exception(); //在任意地方都可以抛出异常
+    }
+}
+```
+
+
+
+我们可以根据对某一特定的情况进行 throw
+
+```java
+String str = "abc"
+if("abc".equals(str)){
+    throw new NumberFormatException();
+}else{
+    System.out.println(str);
+}
+```
+
+
+
+而一般情况下是 try-catch + throw 进行错误集中处理，因为我们有时候并不能列举出所有的异常情况，有的情况我们意想不到，因此需要使用 try-catch，而我们又不想自己去处理异常，因此，直接在里面 throw 出异常给上层处理，同时可以进行一些 log 记录
+
+当然，可能会说为什么不直接 throws，因为 catch 后可以进行一些日志处理之类的特殊处理
+
+```java
+public void h() throws Exception{
+    try{
+    //
+    }catch(Exception e){
+    	logger.info("出现异常了");
+        thorw new Exception();
+    }
+}
+```
+
+
+
+
+
+## 15、关于 String 锁（intern()）
+
+
+
+> ### 字符串锁
+
+```java
+
+synchronized (h1()){
+	//操作
+}
+
+synchronized (h2()){
+	//操作
+}
+
+public String h1(){
+    return "1";
+}
+public String h2(){
+    return new StringBuilder("1").toString();
+}
+```
+
+我们都知道，synchronized 只要锁的是同一个对象，那么其他线程来获取锁的时候会进入到这个对象所管理的 同步队列中等待唤醒，而如果获取的不是同一个对象锁，那么互不影响
+
+对于上面的代码，h1() 返回的是 常量池中的 "1"，因此后续线程每次调用 h1() 获取的都是 常量池中 "1" 的锁
+
+h2() 返回的是 sb 每次重新创建的 String 对象，因此后续线程每次调用 h2() 获取的都是不同对象的 锁，压根锁不住线程
+
+
+
+> ### 字符串锁的实例问题以及解决方法
+
+如果我们需要的业务是进行字符串拼接，比如多个线程获取一个 ip，我们需要上锁，由于 ip 是传参的，那么就无法在编译时期确定，这样的话，后续拼接就肯定是重新创建一个字符串对象，这样的话每个线程获取的都是不同对象的锁，导致锁无效
+
+```java
+final String LOCK = "lock_";
+
+public void pro(String ip){
+	String lock = h2(ip);
+    synchronized(lock){
+        //处理
+    }
+}
+
+public String h2(String ip){
+	//获取线程名
+	String name = Thread.currentThread.getName();
+	//ip 和 线程名进行拼接
+	StringBuilder sb = new StringBuilder();
+	sb.append(LOCK).append(ip);
+	
+    return sb.toString();
+}
+```
+
+
+
+解决方法：调用 intern() 方法，这样返回的都是对同一个对象的引用了，关于这个方法，有点复杂，看下面的讲解
+
+```java
+return sb.toString().intern();	//调用 intern()
+```
+
+
+
+> ### 字符串的 intern() 
+
+JDK 6 及以前 和 JDK 7 及以后 这个方法由于 **字符串常量池 的位置不同 **而出现了不同的效果
+
+**JDK 6 以前是在方法区中的，而 JDK 7 将 字符串常量池 放到了 堆中**
+
+
+
+目前可信的说法是 JDK 6 的字符串常量池存放的只有对象，JDK 7 的字符串常量池既可以存储对象，又可以存储引用
+
+
+
+```java
+String a = "abc";
+```
+
+调用 a.intern()，根据 JDK 版本不同有两种情况：
+
+- JDK 6 的时候，，如果常量池中没有 "abc"，那么就会在常量池中创建一个 "abc"，然后返回常量池中这个  "abc" 的引用，如果- 有，那么直接返回这个对象的引用
+
+- JDK 7 的时候，如果常量池中有 "abc"，那么直接返回引用，如果没有，那么在常量池中创建一个指向堆中 a 对象的引用，然后返回该引用的引用，即 JDK 6 不同的是， JDK 6 没有的时候创建的是对象，而 JDK 7 没有的时候是复用堆中的对象，创建的是引用
+
+下面是证明：
+
+```java
+//常量池中不存在 ab
+String a = new String("a") + new String("b");
+System.out.println(a.intern() == a);
+```
+
+输出结果：
+
+```java
+JDK6：false
+JDK7：true
+```
+
+上面的代码将 a 分开来使用两个 new String() 拼接而不使用 new String("a" + "b") 的原因是避免在编译期间就在常量池中创建了 "ab"，导致结果错误，上面这个代码在常量池中只有 "a" 和 "b"，是没有 "ab" 的
+
+因此，如果是在 JDK 6，那么在常量池中创建的就是新的对象，那么返回的引用肯定跟 a 不一样，因为内存地址不同，返回 false
+
+如果是在 JDK 7 中，在常量池中创建的是指向 a 中对象的引用，返回的是这个引用的引用，因此最终都是指向的 a 对象，因此内存地址相同，返回 true
+
+
+
+
+
+```java
+String str1 = new String("a")+ new String("b");
+System.out.println(str1.intern() == str1);
+System.out.println(str1 == "ab");
+```
+
+输出结果：
+
+```java
+JDK6：false;false;
+JDK 7：true; true;
+```
+
+最开始 字符串常量池中只有 a 和 b，没有 ab
+
+在 JDK 6 中，str1.intern() 直接创建对象，并返回引用，因此跟 str1 不同，后面的也一样
+
+在 JDK 7中， str1.intern() 在常量池中创建 指向 str1 的引用，并返回该引用，因此第一个为 true，而后续直接比较 "ab"，获取的是常量池中的 "ab" 的对象或引用，而此时存在 "ab" 的引用，因此直接返回，而这个引用指向的是 str1 指向的对象，因此为 true
+
+
+
+从这里我们可以进行推测，如果是编译期间，那么字符串常量池存储的应该是 字符串对象，比如上面的 "a" 和 "b"，在编译期间就存储进去了，这应该是不会存储引用的，因为都没有在堆中创建这两个对象，也没必要去创建，所以在常量池中创建的应该是对象
+
+而当运行过程中调用 str.intern() 的时候，这时候 str 指向的对象必定已经创建出来了，无论这个 str 是在堆中还是在常量池中，如果是在常量池中，那么直接返回的是对这个对象的引用，跟 str 一样，无需创建引用，如果是在堆中，那么创建指向堆中 str 指向的对象的引用，然后返回
+
+因此 JDK 7 中的字符串常量池 存储 对象 和 引用

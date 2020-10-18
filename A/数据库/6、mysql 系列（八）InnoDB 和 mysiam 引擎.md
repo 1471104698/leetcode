@@ -66,6 +66,12 @@ row_id 是某个数据库下所有 InnoDB 表全局共享的，
 
 
 
+InnodB 不支持全文索引（后续版本支持了），mysiam 支持全文索引
+
+```
+如果在 mysql 不支持的版本下，mysiam 对 %abc% 建立全文索引那么查询效率也提高了很多
+```
+
 
 
 ## mysiam 读的速度比 InnoDB 快的原因

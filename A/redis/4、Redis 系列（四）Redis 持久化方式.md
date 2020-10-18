@@ -8,15 +8,15 @@
 
 ## 1、RDB
 
-RDB 文件是一个二进制文件，**同时也是一个快照文件，保存的是创建 RDB 文件时的所有的 key-value 数据**
+RDB 文件是一个二进制文件，**同时也是一个快照文件，保存的是创建 RDB 文件时数据库的所有的 key-value 数据**
 
 每一次 RDB 操作都是先创建 rdb.dump 文件，然后读取 redis 内存中的所有数据，然后以二进制的形式存储进这个文件当中
 
-由于每次创建的 RDB 文件都是存储的 redis 现有的所有数据，即当前创建的 RDB 文件具有时效性，以前的 RDB 文件就过时了，因此会覆盖掉以前的 RDB 文件
+新创建的 RDB 文件会覆盖掉以前的 RDB 文件
 
 
 
-### 1、创建 和 写入 RDB 文件
+> ###  1、RDB 备份
 
 创建 RDB 文件有两个命令：save 和 bgsave
 
@@ -50,7 +50,7 @@ save 60 10000
 
 
 
-### 2、加载 RDB 文件
+> ### 2、加载 RDB 文件
 
 redis 默认设置在 redis 启动时加载 RDB 文件，即是自动加载的
 
@@ -309,7 +309,7 @@ CopyOnWrite 简称为 COW，是一种读写分离思想的实现
 CopyOnWrite 技术的缺点：
 
 - 读操作在 写操作完成并且将集合进行覆盖前读到的都是旧数据，无法获取实时性数据
-- 由于写操作需要 copy y一份，那么在 集合数据量大的时候，比如 200M，那么 copy 出来的副本也是 200M，那么将会相当占据内存，可以看作是 空间换时间
+- 由于写操作需要 copy 一份，那么在 集合数据量大的时候，比如 200M，那么 copy 出来的副本也是 200M，那么将会相当占据内存，可以看作是 空间换时间
 
 
 
@@ -320,6 +320,7 @@ CopyOnWrite 技术的缺点：
 ```java
 public boolean add(E e) {
     final ReentrantLock lock = this.lock;
+    //加锁复制副本
     lock.lock();
     try {
         Object[] elements = getArray();

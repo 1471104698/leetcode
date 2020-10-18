@@ -1,152 +1,6 @@
 # String
 
-
-
-## 1、new String() 创建了多少个对象
-
-> ### 前置知识
-
-```java
-String str = "a" + "b"
-```
-
-"a" + "b" 在编译期间就可以直接确定结果是 "ab" 了，因此直接存储进常量池
-
-
-
-```java
-String b = "b";
-String str = "a" + b;
-```
-
-b 是符号引用，会调用 StringBuilder 进行 append 拼接，再调用 toString() 转换为字符串
-
-
-
-如果全部是字符串常量拼接，那么生成的对象只有一个常量池对象
-
-如果存在变量拼接，那么生成的对象有 一个 StringBuilder 和 一个 String
-
-一般情况下，我们都是忽略 StringBuilder 这个对象，下面的分析也是如此
-
-
-
-> ### 情况1
-
-```java
-String s1 = new String("abc");
-String s2 = "abc";
-System.out.println(s1 == s2); //false
-```
-
-new String("abc") 的时候，字符串常量池中不存在 abc，因为创建一个，然后再在堆中创建一个，返回的是对堆中对象的引用
-
-后面 s2 指向的是对常量池对象的引用，所以为 false
-
-
-
-> ### 情况2
-
-```java
-String s1 = "a" + "bc";
-```
-
-这里有点特殊，字符串常量池并不会 "a" 和 “bc”，只会创建 "abc"，因此最终在字符串常量池中只存在 "abc"
-
-
-
-证明如下：
-
-```java
-//常量池中有 aab，但不知道有没有 aa 和 b
-String str = "aa" + "b";
-String str1 = new String("a") + new String("a");
-System.out.println(str1.intern() == str1);	//true
-```
-
-如果 str 拼接的时候会在字符串常量池中创建 "aa" 和 "b"，那么 str1.intern() 获取到的应该是原来创建的常量池该对象的引用
-
-那么意味 str1.intern() 和 str1 指向就是不同的内存地址，应该返回 false,但是实际上返回的是 true，表示没有创建 "aa" 和 "b"
-
-
-
-```java
-//常量池中有 aab，但不知道有没有 aa 和 b
-String b = "b";
-String str = "aa" + b;
-String str1 = new String("a") + new String("a");
-System.out.println(str1.intern() == str1);	//false
-```
-
-当拼接存在 变量，那么常量池就会创建 "aa"，所以 str1.intern() 获取的就是原来创建的对象的引用
-
-所以导致 str1.intern() 和 str1 的内存地址不同，所以返回了 false
-
-
-
-
-
-> ### 情况3
-
-```java
-String str = "bc"
-String str1 = "a" + str;
-```
-
-这里由于 str 是引用变量，所以在编译期间不会转换，而字符串常量池会创建 "a" 和 "bc"
-
-所以只要 拼接的字符串中，存在引用变量，那么字符串常量池就会进行存储
-
-
-
-> ### 情况4
-
-```java
-String str = new String("a") + new String("b");
-String str = new String("a" + "b");
-```
-
-第一条语句会在字符串常量池中创建 a 和 b，在堆中创建 a 和 b 和 ab
-
-第二条语句会在字符串常量池 和 堆中 都创建 ab
-
-
-
-> ### 情况5
-
-```java
-String s1 = “abc”;
-String s2 = “a”;
-String s3 = “bc”;
-String s4 = s2 + s3;
-System.out.println(s1 == s4); //false
-```
-
-常量池中创建了 a、bc、abc
-
-s2 和 s3 虽然在编译期间可以确定，但是存在符号引用，编译器不会在编译期间去替换掉这些引用，导致 s4 在编译期间不能确定而不会放入常量池，并且后续是使用 StringBuilder 进行拼接然后调用 toString() 创建一个新的对象返回的
-
-
-
-> ### 情况6
-
-```java
-String s1 = “abc”;
-final String s2 = “a”;
-final String s3 = “bc”;
-String s4 = s2 + s3;
-System.out.println(s1 == s4);	//true
-```
-
-由于 s2 和 s3 用 final 修饰，所以表示值不会改变，编译器在编译期间会将所有使用 s2 和 s3 的地方全部替换为真实值，而不是引用，这样的话就导致 s4 在编译期间确定了，和 s1 指向常量池中同一个对象
-
-如果 s2 和 s3 中任意一个去掉 final，这样也会导致 s4 不在编译期间确定
-
-
-
-
-
-## 2、String 为什么设计为不可变和不可继承
+## 1、String 为什么设计为不可变和不可继承
 
 > ### 什么是不可变？
 
@@ -253,142 +107,367 @@ String 类使用 final 修饰，表示该类不可被继承
 
 
 
-## 3、关于 String 锁（intern()）
+## 2、String 的 intern()
+
+具体看  https://www.zhihu.com/question/55994121 
+
+intern() 涉及到 字符串常量池，这里根据字节码来说明下字符串常量池的存储
 
 
 
-> ### 字符串锁
+### 1、字符串常量池
 
-```java
-synchronized (h1()){
-	//操作
-}
+**JDK 6 以前字符串常量池存储在在方法区中，而 JDK 7 则放到了堆中**
 
-synchronized (h2()){
-	//操作
-}
-
-public String h1(){
-    return "1";
-}
-public String h2(){
-    return new StringBuilder("1").toString();
-}
-```
-
-我们都知道，synchronized 只要锁的是同一个对象，那么其他线程来获取锁的时候会进入到这个对象所管理的 同步队列中等待唤醒，而如果获取的不是同一个对象锁，那么互不影响
-
-对于上面的代码，h1() 返回的是 常量池中的 "1"，因此后续线程每次调用 h1() 获取的都是 常量池中 "1" 的锁
-
-h2() 返回的是 sb 每次重新创建的 String 对象，因此后续线程每次调用 h2() 获取的都是不同对象的 锁，压根锁不住线程
+JDK 7 的字符串常量池中只存储了对堆中字符串的引用，不会存储任何的对象
 
 
 
-> ### 字符串锁的实例问题以及解决方法
-
-如果我们需要的业务是进行字符串拼接，比如多个线程获取一个 ip，我们需要上锁，由于 ip 是传参的，那么就无法在编译时期确定，这样的话，后续拼接就肯定是重新创建一个字符串对象，这样的话每个线程获取的都是不同对象的锁，导致锁无效
+存在以下代码：
 
 ```java
-final String LOCK = "lock_";
-
-public void pro(String ip){
-	String lock = h2(ip);
-    synchronized(lock){
-        //处理
+class NewTest2 {
+    public static void main(String[] args) {
+        String s1 = new String("he") + new String("llo");
     }
 }
+```
 
-public String h2(String ip){
-	//获取线程名
-	String name = Thread.currentThread.getName();
-	//ip 和 线程名进行拼接
-	StringBuilder sb = new StringBuilder();
-	sb.append(LOCK).append(ip);
-	
-    return sb.toString();
+
+
+通过 javap -v 获取字节码指令
+
+```java
+  public static void main(java.lang.String[]);
+    descriptor: ([Ljava/lang/String;)V
+    flags: ACC_PUBLIC, ACC_STATIC
+    Code:
+      stack=4, locals=2, args_size=1
+         0: new           #2                  // class java/lang/StringBuilder
+         3: dup
+         4: invokespecial #3                  // Method java/lang/StringBuilder."<init>":()V
+         7: new           #4                  // class java/lang/String
+        10: dup
+        11: ldc           #5                  // String he
+        13: invokespecial #6                  // Method java/lang/String."<init>":(Ljava/lang/String;)V
+        16: invokevirtual #7                  // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+        19: new           #4                  // class java/lang/String
+        22: dup
+        23: ldc           #8                  // String llo
+        25: invokespecial #6                  // Method java/lang/String."<init>":(Ljava/lang/String;)V
+        28: invokevirtual #7                  // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+        31: invokevirtual #9                  // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+        34: astore_1
+        35: return
+
+```
+
+可以看出字节码中涉及一个 ldc 指令，它操作的是非静态变量，如果是静态变量，那么对应的指令应该是 putstatic/getstatic
+
+ldc #5 表示将 常量池中的 #5 位置的数据 推送到 操作数栈顶，这时候是第一次调用，所以还是符号引用，并不是直接引用，因此这时候会进行解析，查看 字符串常量池 中是否存在这个字符串的引用，这时候是第一次，所以没有，那么会在堆中创建该字符串的 OOP 对象，然后将 引用 存储到 字符串常量池 中，再将引用返回，替换到 常量池 中 #5 的内容
+
+后续再执行这个命令的时候可以直接根据引用找到堆中的对象
+
+可以发现，字符串 "he" 和 "llo" 存在 ldc 指令，因此它们会在解析阶段在堆中创建对象然后将引用放到字符串常量池中，这样别的地方可以直接引用，无需创建
+
+
+
+### 2、创建对象的情况
+
+**情况一：**
+
+```java
+class A {
+    public static void main(String[] args) {
+        String s1 = new String("he") + new String("llo");
+    }
+}
+```
+
+就是上面的例子了，"he" 和 "llo" 会在堆中创建对象，然后将引用存储到字符串常量池中
+
+
+
+**情况二：**
+
+```java
+class A {
+    public static void main(String[] args) {
+        String s = "a" + new String("b");
+    }
+}
+```
+
+通过 javap -v 获取字节码指令（省略了部分字节码指令）
+
+可以发现，"a" 和 "b" 都存在 ldc 指令，即会在堆中创建对象，然后将引用存储到字符串常量池中被重用
+
+```java
+  public static void main(java.lang.String[]);
+    descriptor: ([Ljava/lang/String;)V
+    flags: ACC_PUBLIC, ACC_STATIC
+    Code:
+      stack=4, locals=2, args_size=1
+         7: ldc           #4                  // String a
+         9: invokevirtual #5                  // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+        16: ldc           #7                  // String b
+        18: invokespecial #8                  // Method java/lang/String."<init>":(Ljava/lang/String;)V
+        21: invokevirtual #5                  // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+        24: invokevirtual #9                  // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+        27: astore_1
+        28: return
+
+```
+
+
+
+**情况三：**
+
+```java
+class A {
+    public static void main(String[] args) {
+        String s = "a" + "b" + "c" + "d" + "e";
+    }
+}
+```
+
+通过 javap -v 获取字节码指令（省略了部分字节码指令）
+
+可以发现，只有 "abcde" 存在 ldc 指令，而 "a"、"b" 等 没有对应的 ldc 指令
+
+即如果是直接使用字面量拼接，那么只有拼接后的字符串才会在堆中创建，用来拼接的字面量则不会
+
+只有这种完全字面量的拼接不会使用 StringBuilder 进行拼接
+
+```java
+  public static void main(java.lang.String[]);
+    descriptor: ([Ljava/lang/String;)V
+    flags: ACC_PUBLIC, ACC_STATIC
+    Code:
+      stack=1, locals=2, args_size=1
+         0: ldc           #2                  // String abcde
+         2: astore_1
+         3: return
+```
+
+
+
+**情况四：**
+
+```java
+public class A {
+    public static void main(String[] args) {
+        String s = "a" + "b" + "c" + "d" + "e".length();
+    }
 }
 ```
 
 
 
-解决方法：调用 intern() 方法，这样返回的都是对同一个对象的引用了，关于这个方法，有点复杂，看下面的讲解
+这种解除语法糖后就是
 
 ```java
-return sb.toString().intern();	//调用 intern()
+String s = new StringBuilder().append("abcd").append("e".length()).toString();
+```
+
+因为 e 需要求 length()，所以它会单独成为一个字符串，而前面的是字面量的拼接，因此在编译器就可以确定
+
+因此最终 "abcde" 和 "e" 存在 ldc 指令，并且还需要使用 StringBuilder 进行拼接
+
+```java
+    Code:
+      stack=2, locals=2, args_size=1
+         0: new           #2                  // class java/lang/StringBuilder
+         3: dup
+         4: invokespecial #3                  // Method java/lang/StringBuilder."<init>":()V
+         7: ldc           #4                  // String abcd
+         9: invokevirtual #5                  // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+        12: ldc           #6                  // String e
+        14: invokevirtual #7                  // Method java/lang/String.length:()I
+        17: invokevirtual #8                  // Method java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;
+        20: invokevirtual #9                  // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+        23: astore_1
+        24: return
+
 ```
 
 
 
-> ### 字符串的 intern() 
-
-JDK 6 及以前 和 JDK 7 及以后 这个方法由于 **字符串常量池 的位置不同 **而出现了不同的效果
-
-**JDK 6 以前是在方法区中的，而 JDK 7 将 字符串常量池 放到了 堆中**
-
-
-
-目前可信的说法是 JDK 6 的字符串常量池存放的只有对象，JDK 7 的字符串常量池既可以存储对象，又可以存储引用
-
-
+**情况五：**
 
 ```java
-String a = "abc";
+public class A {
+    public static void main(String[] args) {
+        String a = "a";
+        String b = "b";
+        String c = a + b;
+        String d = "a" + b;
+    }
+}
 ```
 
-调用 a.intern()，根据 JDK 版本不同有两种情况：
+通过 javap -v 获取字节码指令（省略了部分字节码指令）
 
-- JDK 6 的时候，，如果常量池中没有 "abc"，那么就会在常量池中创建一个 "abc"，然后返回常量池中这个  "abc" 的引用，如果- 有，那么直接返回这个对象的引用
+可以发现，"a" 和 "b" 都存在 ldc 指令，而 拼接的 c 和 d 没有对应的 ldc 指令
 
-- JDK 7 的时候，如果常量池中有 "abc"，那么直接返回引用，如果没有，那么在常量池中创建一个指向堆中 a 对象的引用，然后返回该引用的引用，即 JDK 6 不同的是， JDK 6 没有的时候创建的是对象，而 JDK 7 没有的时候是复用堆中的对象，创建的是引用
-
-下面是证明：
+即如果拼接的过程中 存在变量，那么由于存在不确定性，所以不会在堆中创建对象并且将引用存储到字符串常量池中
 
 ```java
-//常量池中不存在 ab
-String a = new String("a") + new String("b");
-System.out.println(a.intern() == a);
+    Code:
+      stack=2, locals=5, args_size=1
+         0: ldc           #2                  // String a
+         2: astore_1
+         3: ldc           #3                  // String b
+        37: aload_2
+        38: invokevirtual #6                  // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+        41: invokevirtual #7                  // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+        44: astore        4
+        46: return
+
+```
+
+因为变量的值是可变的，并且是不可估计的，编译器无法确定变量的值，比如
+
+```java
+public class A {
+    public static void main(String[] args) throws InterruptedException {
+        String a = new Scanner(System.in).next();
+        String c = null;
+        if(a.equals("1")){
+            c = "2";
+        }else{
+            c = "3";
+        }
+        String d = a + c;
+    }
+}
+```
+
+这种情况下编译器怎么知道 a 和 c 的值是多少。。。所以是无法进行拼接的
+
+
+
+**情况六：**
+
+```java
+public class A {
+    public static void main(String[] args) throws InterruptedException {
+        final String a = "a";
+        final String b = "b";
+        String c = a + b;
+    }
+}
+```
+
+可以看出 a 和 b 和 拼接的 c 都存在 ldc 指令，这是因为 a 和 b 是 final 变量，并且已经是确定的了，那么意味着不会发生改变，这样的话 c 也是确定的了，所以可以在堆中创建并将引用存储到 字符串常量池 中
+
+类似完全字面量，不需要 StringBuilder 拼接
+
+```java
+    Code:
+      stack=1, locals=4, args_size=1
+         0: ldc           #2                  // String a
+         2: astore_1
+         3: ldc           #3                  // String b
+         5: astore_2
+         6: ldc           #4                  // String ab
+         8: astore_3
+         9: return
+
+```
+
+
+
+**情况七：**
+
+```java
+public class A {
+    public static void main(String[] args) {
+        final String a = new Scanner(System.in).next();
+        final String b = "b";
+        String c = a + b;
+    }
+}
+```
+
+可以看出 只有 b 有 ldc，因为 a 需要等待用户输入，final 只能保证不可变，但是如果值不确定还是不行，所以 a 和 c 都没有 ldc
+
+```java
+    Code:
+      stack=3, locals=4, args_size=1
+         0: new           #2                  // class java/util/Scanner
+         3: dup
+         4: getstatic     #3                  // Field java/lang/System.in:Ljava/io/InputStream;
+         7: invokespecial #4                  // Method java/util/Scanner."<init>":(Ljava/io/InputStream;)V
+        10: invokevirtual #5                  // Method java/util/Scanner.next:()Ljava/lang/String;
+        13: astore_1
+        14: ldc           #6                  // String b
+        16: astore_2
+        17: new           #7                  // class java/lang/StringBuilder
+        20: dup
+        21: invokespecial #8                  // Method java/lang/StringBuilder."<init>":()V
+        24: aload_1
+        25: invokevirtual #9                  // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+        28: ldc           #6                  // String b
+        30: invokevirtual #9                  // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+        33: invokevirtual #10                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+        36: astore_3
+        37: return
+
+```
+
+
+
+
+
+### 3、intern()
+
+```java
+class NewTest2 {
+    public static void main(String[] args) {
+        String s1 = new String("he") + new String("llo");
+        String s2=new String("h")+new String("ello");
+        String s3=s1.intern();
+        String s4=s2.intern();
+        System.out.println(s1==s3); 
+        System.out.println(s1==s4);
+        System.out.println(s1==s2);
+    }
+}
 ```
 
 输出结果：
 
-```java
-JDK6：false
-JDK7：true
+```
+true
+true
+false
 ```
 
-上面的代码将 a 分开来使用两个 new String() 拼接而不使用 new String("a" + "b") 的原因是避免在编译期间就在常量池中创建了 "ab"，导致结果错误，上面这个代码在常量池中只有 "a" 和 "b"，是没有 "ab" 的
+上面会存在 ldc 指令的有 "he"、"llo"、"h"、"ello"
 
-因此，如果是在 JDK 6，那么在常量池中创建的就是新的对象，那么返回的引用肯定跟 a 不一样，因为内存地址不同，返回 false
+s1 和 s2 都是 "hello"
 
-如果是在 JDK 7 中，在常量池中创建的是指向 a 中对象的引用，返回的是这个引用的引用，因此最终都是指向的 a 对象，因此内存地址相同，返回 true
+执行 s1.intern() ，会去字符串常量池中查找是否存在 "hello" 的引用，如果存在，那么直接返回，这里是不存在的，因此会将 s1 在堆中的引用存储到字符串常量池中
 
+执行 s2.intern()，同样会去查找字符串常量池，发现已经存在了，因此直接将引用返回
 
-
-
-
-```java
-String str1 = new String("a")+ new String("b");
-System.out.println(str1.intern() == str1);
-System.out.println(str1 == "ab");
-```
-
-输出结果：
-
-```java
-JDK6：false;false;
-JDK 7：true; true;
-```
-
-最开始 字符串常量池中只有 a 和 b，没有 ab
-
-在 JDK 6 中，str1.intern() 直接创建对象，并返回引用，因此跟 str1 不同，后面的也一样
-
-在 JDK 7中， str1.intern() 在常量池中创建 指向 str1 的引用，并返回该引用，因此第一个为 true，而后续直接比较 "ab"，获取的是常量池中的 "ab" 的对象或引用，而此时存在 "ab" 的引用，因此直接返回，而这个引用指向的是 str1 指向的对象，因此为 true
+这意味着 s3 和 s4 持有的引用都是指向的 s1，因此 s1 == s3 == s4 != s2
 
 
 
-从这里我们可以进行推测，如果是编译期间，那么字符串常量池存储的应该是 字符串对象，比如上面的 "a" 和 "b"，在编译期间就存储进去了，这应该是不会存储引用的，因为都没有在堆中创建这两个对象，也没必要去创建，所以在常量池中创建的应该是对象
+这里普通的讲一个情况就好了，其他的情况都是类似的，反正都是去字符串常量池中查找，没有就添加引用，有就返回引用
 
-而当运行过程中调用 str.intern() 的时候，这时候 str 指向的对象必定已经创建出来了，无论这个 str 是在堆中还是在常量池中，如果是在常量池中，那么直接返回的是对这个对象的引用，跟 str 一样，无需创建引用，如果是在堆中，那么创建指向堆中 str 指向的对象的引用，然后返回
 
-因此 JDK 7 中的字符串常量池 存储 对象 和 引用
+
+
+
+## 3、使用 String 作为锁对象
+
+由于 sync 锁它是通过 OOP 对象头的 Mark 信息来记录的，因此它只认堆中的对象
+
+对于 String，即使它们的值是相同的，但如果在堆中是不同的对象，那么最终锁的也是不同的对象
+
+因此，使用 String 作为锁对象的时候，需要注意保证锁的是全局的对象
+
+可以使用 intern() 方法来保证每次获取的都是常量池中的唯一对象

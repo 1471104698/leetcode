@@ -2,15 +2,13 @@
 
 
 
-## 1、mysql 锁 锁的是什么
+## 1、锁的是什么
+
+**表锁：**给整个聚簇索引树上的节点加锁
+
+**行锁：**给 聚簇索引/非聚簇索引 上的某个节点加锁
 
 
-
-对于表锁，直接就是对表加锁
-
-对于行锁，**InnoDB 给 索引树上的 节点 加锁**
-
-InnoDB 的索引树有两种：聚簇索引 和 非聚簇索引
 
 查询聚簇索引：
 
@@ -18,7 +16,7 @@ InnoDB 的索引树有两种：聚簇索引 和 非聚簇索引
 update user set age = 10 where id = 49; 
 ```
 
-id 是聚簇索引，因此会在 id = 49 上加写锁
+解释：id 是聚簇索引，因此会在 id = 49 上加写锁
 
 
 
@@ -28,7 +26,11 @@ id 是聚簇索引，因此会在 id = 49 上加写锁
 update user set age = 10 where name = 'Tom'; 
 ```
 
-name 是非聚簇索引，因此它会在叶子节点得到的是聚簇索引的值，假设它的聚簇索引 id = 49，再到聚簇索引树上查询， 因此会在非聚簇索引树将所有 name = 'Tom' 的节点 和 聚簇索引树的节点 id = 49 上都加锁
+解释：name 是非聚簇索引，因此它会在叶子节点得到的是聚簇索引的值
+
+假设它的聚簇索引 id = 49，再到聚簇索引树上查询，
+
+因此会在非聚簇索引树将所有 name = 'Tom' 的节点 和 聚簇索引树的节点 id = 49 上都加锁
 
 
 
@@ -147,7 +149,7 @@ TABLE LOCK table `hrdb`.`t` trx id 43764 lock mode IX	//表 t 加上了 IX 锁
 RECORD LOCKS space id 101 page no 4 n bits 72 index PRIMARY of table `hrdb`.`t` trx id 43764 lock_mode X locks rec but not gap	//主键索引上加了 X 锁
 ```
 
-总共加了 2 个锁，表 t 加上了 IX 锁，对应的主键索引 上加上了一个 X 锁
+总共加了 2 个锁，表 t 加上了 IX 锁，主键索引节点 上加上了一个 X 锁
 
 
 

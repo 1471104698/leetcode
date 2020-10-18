@@ -1,22 +1,12 @@
 # Redis 底层数据模型
 
-## 1、使用 redis 的原因，以及 redis 的特点
+## 1、使用 redis 的原因 和 redis 的特点
 
-> ### 为什么使用 缓存？
+> ### 为什么使用 redis?
 
-对于某些热点数据，如果不使用缓存，那么每次请求都打到数据库上，对于并发量超高的情况，数据库根据处理不过，可能会导致数据库服务崩溃，同时数据库查询需要 IO 操作，对于 redis 这种基于内存的操作来说，时间效率上完全不存在可比性
+因为 redis 是基于内存实现的，单单在数据存储方面无论是查找还是别的，都比 mysql 数据库快，因为 mysql 数据库的数据存储在 磁盘中，每次都需要进行 I/O 操作，寻道时间 redis 就不知道能够执行多少条命令了，效率相差太多
 
-redis 主要是当作缓存中间件
-
-它速度快，完全是基于内存的（关机数据就消失了，所以需要持久化成文件），使用 C 语言实现，并且是单线程的，避免了多线程频繁上下文切换的开销以及竞争，网络层方面 使用 epoll IO 多路复用模型 解决单线程处理多连接问题，
-
-**注意：单线程仅仅是说在网络请求上使用单线程处理用户请求，像持久化这种是会另外开一个线程去做的**
-
-
-
-```java
-redis 作者说 redis 的瓶颈不在 CPU，即，而是在网络 IO 或者 机器内存上，即电脑的 CPU 单线程足以支持处理速度
-```
+并且它内部自己实现了很多简洁高效的数据结构，应用场景广泛
 
 
 
@@ -29,43 +19,39 @@ redis 作者说 redis 的瓶颈不在 CPU，即，而是在网络 IO 或者 机�
 
 
 
-> ###  为什么命令执行使用单线程就快了
+**为什么单线程就快了？**
 
-如果是多线程的，那么需要线程上下文切换
+具体看  https://www.cnblogs.com/caihuafeng/p/5438753.html 
 
- 一个CPU主频是 2.6GHz，这意味着每秒可以执行：2.6*10^9 个指令，那么每个指令的时间大概是0.38ns！
+首先我们要明白多线程的使用意义，只有在 IO 操作的时候，CPU 会空闲，这样的话就需要让 CPU 去执行别的线程，这样 CPU 才不会浪费
 
-而一次上下文切换，将近需要耗时2000ns！而这个时间内，CPU什么都干不了，只是做了保存上下文都动作！
+如果任务都是 CPU 密集型（计算密集型）的，CPU 不会空闲，这样的话如果使用多线程这里执行一点，那里执行一点，由于存在进程/线程上下文切换，这就导致比 单线程顺序执行还慢了（线程上下文切换时间足够 CPU 执行 几万条指令了）
 
-同时，如果是多线程执行的话，那么防止共享资源的数据错乱，所以又需要加锁，又会产生锁的争夺
-
-
-
-> ### redis 的瓶颈
-
-具体看： https://www.cnblogs.com/aspirant/p/11704530.html 
+同时，多线程的情况下还需要防止共享资源的数据错乱，所以又需要加锁，又会产生锁的争夺
 
 
 
-redis 的瓶颈不是 CPU，因为 CPU 的速度已经足够支撑命令的执行了
+而 Redis 是完全基于内存操作的，它的操作大部分都是 CPU 密集型，如果使用多线程无疑是在浪费 CPU 资源去做无用功
 
-redis 的瓶颈在于 内存 和 网络带宽
+因此，执行用户命令的时候都是单线程在执行
 
-内存这个不用讲，而网络带宽需要知道 redis 客户端 和 服务端通信的过程
+而对于 网络 IO （比如获取 socket，轮询 socket 事件）这种会阻塞线程的 IO 操作，就可以使用多线程来执行
 
-一般 redis 客户端是在我们自己运行的服务器上调用的，而 redis 服务端则是在另外一台机器
-
-redis 执行一条命令的过程：发送命令、命令排队（由于是单线程）、执行命令、返回结果
-
-而发送命令 和 返回结果 都是需要在网路上传输的，即需要 TCP 等，这里就有个 RTT（往返时间）
-
-如果 我们的服务器在 上海， redis 服务器在北京， 两地直线距离约为1300公里，那么1次RTT时间=1300×2/（300000×2/3）=13毫秒（光在真空中传输速度为每秒30万公里，这里假设光纤为光速的2/3），那么客户端在1秒内大约只能执行80次左右的命令，这就和Redis的高并发高吞吐特性背道而驰啦！所以一般情况下，都是就近部署！ 
+在 redis 6.0 就使用多线程来处理 网络 IO 了，但是处理用户命令仍然是单线程
 
 
 
+> ### Redis 使用场景
+
+- session 共享
+- 缓存
+- 排行榜
+- 分布式锁
+- 队列
 
 
-## 2、redis 数据结构
+
+## 2、redis 基本数据结构
 
 
 
@@ -105,6 +91,12 @@ redisObject = {
     encoding:embstr,
     ...}
 ```
+
+<img src="http://q299r6u1u.bkt.clouddn.com/blog/20191225/rQUSe5cbVjvn.png?imageslim" style="zoom:50%;" />
+
+
+
+
 
 
 
@@ -657,33 +649,62 @@ intset 保证内部数据是有序的，因此每次插入一个数据 会进行
 
 
 
-哈希表跟 java 的 hashMap 差不多，有两种解决哈希冲突的方法：开放地址法 、拉链法
+哈希表 有两种解决哈希冲突的方法：开放地址法 、拉链法
 
-redis 使用的是 拉链法
+dict 使用的是 拉链法
 
-
+我们需要知道，**redis 底层管理 key 也是使用一个 dict，所以才不允许 key 重复**
 
 > ### dict 结构
 
 redis 中的 dict 是专门根据 redis 特性进行设计的，类似如下：
 
-```java
-class dict{
-    //ht[0] 用来存储数据， ht[1] 用来 rehash
-    HT[2] ht;
-    //记录 rehash 进程， -1 表示没进行 rehash
-    int rehashidx;
-}
-class HT{
-    Entry[] table;
-    //table 数组大小，即槽位个数
-    int size;
-    //用来 hash 计算 key 应该存储的槽位的，实际上就是 size - 1
-    int sizemask;
-    //元素个数，每插入一个元素， used + 1
-    int used;
-}
+```C++
+//哈希表 
+typedef struct dictht{
+    dictEntry** table;//存放一个数组的地址，数组中存放哈希节点dictEntry的地址
+    unsingned long size;//哈希表table的大小，出始大小为4
+    unsingned long  sizemask;//用于 hash 定位，值为 size - 1
+    unsingned long  used;//已经存在的 key-value 数量
+}dictht;
+
+//哈希表节点
+typedef struct dictEntry{
+    void* key;      //key
+    /*
+    如果是 redis 层面，那么指向 redisObject 对象所在的地址
+    如果是 redisObject hash 数据结构编码的 dict，那么这里指向的是真正的 value
+    	即 hash key field value
+    	先通过 key 在 redis 层面的 dict 找到对应的 dictEntry，通过 val 指针找到 redisObject 结构
+    	发现 redisObject 是 hash 数据结构，那么通过内部的 encoding 指针找到真正存储数据的 dict
+    	在 dict 中以 field 为 key 找到对应的 dictEntry，再获取内部的真正的 value
+    */
+    void* val;		
+    struct dictEntry *next;  //指向下一个节点，用来解决 哈希冲突
+}dictEntry;
+
+//dict 结构
+typedef struct dict{
+    dictType *type; //直线dictType结构，dictType结构中包含自定义的函数，这些函数使得key和value能够存储任何类型的数据
+    void *privdata; //私有数据，保存着dictType结构中函数的 参数
+    dictht ht[2]; //两张哈希表
+    long rehashidx; //rehash的标记，rehashidx == -1,表示没有进行 rehash
+    int itreators;  //正在迭代的迭代器数量
+}dict;
+
+typedef struct dictType {
+    unsigned int (*hashFunction)(const void *key);      //计算hash值的函数
+    void *(*keyDup)(void *privdata, const void *key);   //复制key的函数
+    void *(*valDup)(void *privdata, const void *obj);   //复制value的函数
+    int (*keyCompare)(void *privdata, const void *key1, const void *key2);  //比较key的函数
+    void (*keyDestructor)(void *privdata, void *key);   //销毁key的析构函数
+    void (*valDestructor)(void *privdata, void *obj);   //销毁val的析构函数
+} dictType;
 ```
+
+dictht 类似 java 的 HashMap，dictEntry 类似 java 的 Node
+
+dict 即内部整合了两张哈希表，即 两个 HashMap，用于渐进式 rehash，redis 真正使用的就是 dict
 
 ![img](https://i6448038.github.io/img/redis-data-struct/hash1.png)
 
@@ -765,20 +786,26 @@ class HT{
 
 
 
-## 4、redis 为什么使用跳表而不使用红黑树
+## 4、redis 为什么使用跳表而不使用 红黑树/B+树
 
-跳表和红黑树 对单个节点的 增删改查的时间复杂度都是一样的，O(logn)
+跳表 和 红黑树 时间复杂度都是 O(logn)
 
-但在 redis 中，zset 还需要范围查询，跳表底层的链表能够简单实现范围查询
+跳表底层是链表，支持范围查询，而红黑树范围查询需要递归
 
-同时，跳表由于一个节点只需要 1 个指针，而红黑树一个节点需要两个指针，所以需要的内存比红黑树少得多，更加节省内存，而内存对于 redis 来说非常重要
-
-跳表比红黑树还要更加容易 实现 和 维护（redis 作者说由于 跳表的简单性，所以别人能够看得懂，因此收到了一个补丁）
+跳表 容易实现和维护（redis 作者说由于 跳表的简单性，因此收到了一个补丁，目前已经用在了 redis 服务器上，是对 ZRANK 的增强，几乎都不用改动代码）
 
 
 
+跳表 和 B+ 树 时间复杂度都是 O(logn)
+
+跳表 和 B+ 树 底层都是链表，都支持范围查询
+
+但是还是那句话，跳表容易实现和维护，B+ 树实现太繁重
 
 
-**既然跳表那么好，那么为什么不直接使用 跳表代替红黑树呢？为什么 hashmap 中不使用跳表呢？**
 
-大概是因为红黑树的稳定性，跳表极端情况下会退化为 O(n)，虽然概率小，而 红黑树稳定的 O(logn)
+>  现在为什么不使用 跳表代替红黑树呢？
+
+因为 跳表使用前提是 元素节点之间要有排序关系，才能够跳跃查找，在元素节点没有排序关系的情况下，比如 HashMap 这种是不能使用跳表的；
+
+对于有排序关系的，比如 TreeMap 的并发实现类 ConcurrentSkipListMap 就是使用的跳表

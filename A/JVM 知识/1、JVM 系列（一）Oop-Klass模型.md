@@ -82,10 +82,11 @@ OOP 主要由两部分组成：对象头 和 对象体
 ```C++
 // hotspot/src/share/vm/oops/oop.hpp
 class oopDesc {
- ...
+    
  private:
-  // 用于存储对象的运行时记录信息，如哈希值、GC分代年龄、锁状态等
+  // markOop 对象，用于存储对象的运行时记录信息，如哈希值、GC分代年龄、锁状态等
   volatile markOop  _mark;
+    
   // Klass指针的联合体，指向当前对象所属的Klass对象
   union _metadata {
     // 未采用指针压缩技术时使用
@@ -93,40 +94,56 @@ class oopDesc {
     // 采用指针压缩技术时使用
     narrowKlass _compressed_klass;
   } _metadata;
- ...
+    
+ //...
 }
 ```
 
 
 
-OOP 提供 4 个方法来判断对象处于哪种状态：
+在对象头的 markOop 中，维护了一个 ObjectMonitor，就是用来记录 sync 重量级锁时的状态
 
 ```C++
-// hotspot/src/share/vm/oops/oop.hpp
-class oopDesc {
- ...   
-  bool is_locked()   const;	//加锁状态
-  bool is_unlocked() const;	//无锁状态
-  bool has_bias_pattern() const;	//偏向状态
- ...
-  bool is_gc_marked() const;	//GC 标记，用于 GC 回收
+class BasicLock;
+class ObjectMonitor;	//
+class JavaThread;
+
+class markOopDesc: public oopDesc {
+    //xxx
 }
-// hotspot/src/share/vm/oops/oop.inline.hpp
-...
-inline bool oopDesc::is_gc_marked() const {
-  return mark()->is_marked();
-}
-inline bool oopDesc::is_locked() const {
-  return mark()->is_locked();
-}
-inline bool oopDesc::is_unlocked() const {
-  return mark()->is_unlocked();
-}
-inline bool oopDesc::has_bias_pattern() const {
-  return mark()->has_bias_pattern();
-}
-...
 ```
+
+ObjectMonitor 结构如下：
+
+```C++
+ObjectMonitor() {
+    _header       = NULL;//markOop对象头
+    _count        = 0;
+    _waiters      = 0,//等待线程数
+    _recursions   = 0;//重入次数
+    _object       = NULL;//监视器锁寄生的对象。锁不是平白出现的，而是寄托存储于对象中。
+    _owner        = NULL;//占有锁的线程
+    _WaitSet      = NULL;//处于wait状态的线程，会被加入到waitSet，比如调用 wait()；
+    _WaitSetLock  = 0;
+    _Responsible  = NULL;
+    _succ         = NULL;
+    _cxq          = NULL;
+    FreeNext      = NULL;
+    _EntryList    = NULL;//处于阻塞block 状态的线程，会被加入到entryList，比如在 sync 锁处竞争锁而阻塞；
+    _SpinFreq     = 0;
+    _SpinClock    = 0;
+    OwnerIsThread = 0;
+    _previous_owner_tid = 0;//监视器前一个拥有者线程的ID
+}
+```
+
+monitor 对象维护了两个队列：WaitSet 和 EntryList
+
+当在 sync 处竞争锁时，没有获取锁的会进入 EntryList，即进入阻塞状态
+
+当获取到锁后，会将 monitor 中的 owner 设置为当前线程，然后将 count = 1，表示重入度为 1，
+
+如果调用 wait()，那么就会将锁释放，即将 当前线程放入 WaitSet 中，然后将 owner 设置为 null，count 设置为 1，但是进入到 WaitSet 封装的节点会记录当前线程的重入度，等到获取线程的时候会重新将 count 复原
 
 
 
@@ -362,43 +379,98 @@ _fields 存储了所有的变量属性，它将每个变量实例化为一个 Fi
 - 当前变量 在 OOP 对象中的 起始偏移量 和 末尾偏移量 offset
 - 等等
 
+
+
+### 3、方法的 code 属性
+
+方法的 Code 属性存储在 Method 中的 Attribute 属性中
+
+ ![image](https://oscimg.oschina.net/oscnet/cddfec32980004cf5f411e6f7b2b2b5e1d6.jpg)
+
  
 
+Code 属性存储的是方法的代码的执行逻辑
+
+```C++
+code_attribute_structure{
+    attribute_name_index;//指向常量池中“code”的索引值 2个字节 u2
+    attribute_length;//code属性的长度 nu4
+    max_stack;//操作数栈的最大深度，用于分配栈帧的操作数栈深度的参考值 u2
+    max_locals;//局部变量所需的存储空间 u2
+    code_length;//机器指令的长度，其值是多少，就向后面数多少个字节表示机器指令 u4
+    code;//跟在code_length后面code_length个字节的机器指令的具体的值（JVM最底层的机器指令）u1
+    exception_talbe_length;//显示异常长度 u2
+    exception_table;显示异常表  exception_info类型(长度为exception_table_length)
+    attribute_count;//属性计数器，code属性中还包含有其他子属性的数目 u2
+    attribute_info;//属性code的子属性，主要有lindeNumberTable,LocalVariableTable
+}
+```
+
+转变为字节码指令看如下：
+
+```java
+    Code:
+      stack=4, locals=2, args_size=1
+         0: new           #2                  // class java/lang/StringBuilder
+         3: dup
+         4: invokespecial #3                  // Method java/lang/StringBuilder."<init>":()V
+         7: new           #4                  // class java/lang/String
+        10: dup
+        11: ldc           #5                  // String he
+        13: invokespecial #6                  // Method java/lang/String."<init>":(Ljava/lang/String;)V
+        16: invokevirtual #7                  // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+        19: new           #4                  // class java/lang/String
+        22: dup
+        23: ldc           #8                  // String llo
+        25: invokespecial #6                  // Method java/lang/String."<init>":(Ljava/lang/String;)V
+        28: invokevirtual #7                  // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+        31: invokevirtual #9                  // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+        34: astore_1
+        35: getstatic     #10                 // Field java/lang/System.out:Ljava/io/PrintStream;
+        38: aload_1
+        39: invokevirtual #11                 // Method java/io/PrintStream.println:(Ljava/lang/String;)V
+        42: return
+
+```
 
 
-### 3、虚方法表
 
-虚方法表是虚分派功能的实现，是 JV,M 多态机制的实现
 
-想一想，一般情况下，方法是如何调用的呢？子类重写父类的方法后又是如何得知的呢？
 
-一切都在这张虚方法表中
+### 4、虚方法表
+
+虚方法表是方法重写机制的实现，它只存储虚方法（非 private、static、final 方法）
+
+在 C++ 中，虚方法表指向的方法的入口地址
+
+而在 JVM 中，它指向的不是方法的入口地址，而是 Klass 中的 Method*，而 Method 里面有一个字段才是真正的方法的调用入口，即上面的 code
+
+因此 JVM 比 C++ 多了一层，需要先定位到 Method*,再找到方法调用入口
+
+
 
 vtable 实际上是一个 由多个 vtableEntry 组成的数组，每个 vtableEntry 存储的是对应方法的字节码地址
 
-![vtalbe结构](https://tva1.sinaimg.cn/large/006tNbRwgy1gbhwk4e0zbj30xm0k0b29.jpg)
+```C++
+class vtable{
+	vtableEntry[] vtableEntrys;
+}
+class vtableEntry{
+    //方法字节码地址
+	int* addr;
+	//xxxx
+}
+```
 
-因此实际方法调用的流程就是：
+ ![vtalbe结构](https://tva1.sinaimg.cn/large/006tNbRwgy1gbhwk4e0zbj30xm0k0b29.jpg)
 
-- 调用 a.say() 
-- JVM 会找到堆中 a 的 OOP 对象头中的元数据指针，定位到方法区中 Klass 对象
-- 通过 Klass 对象中该方法对应的 Method 实例，获取  _vtable_index  属性值，即为 在虚方法表 vtable 中的索引位置
-- 定位到 vtable 中 vtableEntry 获取方法字节码地址
-- 找到方法字节码，解释执行
-
-
-
-但是，怎么实现方法多态调用的呢？
-
-- 在类加载的时候，生成的 Klass 对象中的虚方法表中 vtableEntry 里都是指向 Object 的方法的字节码地址
-
-- 然后获取该类的父类，再获取父类的方法信息，将 虚方法表中的 加上 vtableEntry 指向父类方法的字节码地址
-- 如果子类重写了父类的方法，那么将 虚方法表上原本指向父类方法的 vtableEntry 修改为指向自己方法的字节码地址
-- 因此如果子类没有重写父类的方法，那么 vtableEntry  就指向父类方法的字节码地址，如果子类自己定义了方法或者重写了父类的方法，那么 vtableEntry  就指向自己方法的字节码地址
+  
 
 
 
-### 4、总结
+
+
+### 5、总结
 
 
 
@@ -430,15 +502,17 @@ Klass 对象 和 Class 对象实际上是双向指向的，因此 Class 对象�
 
 
 
-## 4、JVM 加载变量的源码分析过程
+## 4、JVM 计算变量偏移量 的源码分析
 
-具体看 [类变量加载源码分析](https://www.it610.com/article/1306048742218043392.htm) 
+具体看 [类变量加载源码分析]( https://blog.csdn.net/li1376417539/category_9390865.html ) 
 
  [JVM-如何保存-Java-对象](http://blog.zhangjikai.com/2019/09/08/%E3%80%90Java%E3%80%91-JVM-%E5%A6%82%E4%BD%95%E4%BF%9D%E5%AD%98-Java-%E5%AF%B9%E8%B1%A1/) 
 
 
 
-以下是精简过后的解析变量的源码方法
+JVM 类加载是将 class 文件的各部分结构转换为 JVM 内存数据结构，这里是将变量转换为 Field，计算好每个变量的偏移量
+
+调用 parse_fields() 进行计算，方法如下
 
 ```C++
 typeArrayHandle ClassFileParser::parse_fields(Symbol* class_name,
@@ -446,6 +520,7 @@ typeArrayHandle ClassFileParser::parse_fields(Symbol* class_name,
                                               FieldAllocationCount *fac,
                                               objArrayHandle* fields_annotations,
                                               u2* java_fields_count_ptr, TRAPS) {
+    //二进制数流
     ClassFileStream* cfs = stream();
     typeArrayHandle nullHandle;
     // length，获取Java类域变量的数量

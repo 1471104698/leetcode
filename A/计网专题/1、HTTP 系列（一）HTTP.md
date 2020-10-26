@@ -2,22 +2,7 @@
 
 
 
-## 1、一次HTTP的完整请求过程
-
-- 通过 DNS 解析域名，获取 IP 地址
-- 客户端获取 IP 地址，向目的 IP 地址的服务端发起 TCP 连接（三次握手）
-- 建立连接后，客户端向服务端发起 HTTP 请求（比如 get 请求获取静态资源）
-- 服务端接收这个请求，在后台进行处理，比如请求某个页面，那么将 HTML 页面代码返回给浏览器
-- 浏览器获取到完整的 HTML 页面代码，进行渲染，里面的图片等静态资源也通过一个个 HTTP 请求 进行加载（可以看出 HTML 代码 和 图片之类的是分开获取的，需要多次 HTTP 请求）
-- 浏览器渲染完成，将页面展示给用户，如果没有后续请求，浏览器会向服务器发起断开连接（四次挥手）
-
-
-
-## 2、HTTP 常见的状态码 
-
-## ![img](https://mmbiz.qpic.cn/mmbiz_png/J0g14CUwaZfXG1113Sjm0iaOXfoOv0tlUfV6qkzg4yHtOibAfTv6hTicOx73F55WWl4nW2FWlXnDJ7Igd9kvrrRnA/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1) 
-
-
+## 1、HTTP 常见的状态码  
 
 **1xx**
 
@@ -45,7 +30,7 @@
 
  「**302 Moved Permanently**」表示临时重定向，说明请求的资源还在，但暂时需要用另一个 URL 来访问。
 
-上面这两个服务器会将新的 URL 一同返回，客户端自动进行访问
+ 「**304 not modified**」浏览器存在缓存但还没有过期时会发送 get 请求服务器，如果资源没有更新，那么服务器返回 304 告知浏览器继续使用缓存
 
 
 
@@ -73,94 +58,232 @@
 
 
 
-## 3、HTTP 几种请求类型
-
-**get 和 post 的区别：**
-
-- get 是请求资源，请求参数会放在 url 后面，即放在请求行上，post 是上传数据，上传的数据会存储在 请求体中
-- get 是幂等的，无论请求多少次都不会对服务器资源造成影响， post 不是幂等的，因为它涉及到修改和添加数据
-- get 提交的数据有限制，因为是放在 url 的，而 post 存储在请求体中，所以没有限制
+## 2、HTTP 请求方式
 
 
 
-**post 和 put 的区别：**
+[GET 和 POST 到底有什么区别？ - 大宽宽的回答 - 知乎](https://www.zhihu.com/question/28586791/answer/767316172)
 
-post 和 put 都是可以用来 更新和创建资源，但是 put 是幂等的，post 是非幂等的
+**get：**获取静态资源，幂等
 
-比如我们贴吧回帖，点击回帖的时候由于网络问题，多次重复点击，如果是 POST 的话，刷新后可以发现自己发送了很多条相同的回帖，如果是 PUT 的话，可以发现只有一条回帖
+**post：**让服务器创建指定资源，非幂等
 
-如果是发表博客也一样，应该用的是 PUT，而非 POST，主要是看是不是需要幂等
+**put：**让服务器更新指定资源，幂等
 
-但是**一般情况下用 POST 也可以，需要在后台进行幂等校验（比如建立流水表）**
-
-
-
-**delete**：用来删除某个指定资源
+**delete**：让服务器删除某个指定资源，幂等
 
 
 
-## 4、HTTP 报文
+我们需要清楚，**GET、POST、PUT 这些语义都是 HTTP 协议制定的规范而已，并没有强制 POST 方法就必须把参数放到请求体，而不能放到 URL 上，只是程序员统一遵循这个规范，而不需要再去协商什么方法的什么参数是放在 Header 好 还是 Body 好**
 
-HTTP 请求报文包括：
+我们后台也可以调换 POST 和 PUT 的语义，不过这种是约定俗成的规范，要让别人一眼就能看出这个类型的的方法是在干什么事
 
-- 请求行（Request Line）
-- 请求头（Header）
-- 请求体（Request Body）
+```java
+@RequestMapping(method = RequestMethod.POST)
+public ResultVO postSomething(User user){
+	//直接插入
+	userService.add(user);
+}
 
-> ### 抓包分析
+@RequestMapping(method = RequestMethod.PUT)
+public ResultVO postSomething(User user){
+	//查询
+	User user = userService.quety(user);
+	//为空才插入否则更新资源
+	if(user == null){
+		userService.add(user);
+	}else{
+		userService.update(user);
+	}
+}
 
-![1601992003965](C:\Users\蒜头王八\AppData\Roaming\Typora\typora-user-images\1601992003965.png)
-
-第一行是 请求行：
-
-- 请求方法类型 get/post
-- 请求的 url
-- HTTP 版本
-
-接着是请求头：
-
-- host：要访问的域名 
-- cookie
-- referer：从哪个 url 过来的 
-- Content-Type：上传数据的数据类型（Post 才有的，比如 图片就是二进制格式）
-- Connection ：处理完请求之后是否保持连接，如果为 Keep-Alive 值 或者 是 HTTP 1.1，那么就保持连接
-- Accept：告知自己可以接收的数据类型
-
-最后是请求体：
-
-- Post 上传的数据存储在请求体中，而 get 将请求参数直接挂在 url 上，对于 get 来说是不需要用到请求体的
+```
 
 
 
 
 
-HTTP 响应报文包括：
+> ### get 和 post 的区别
 
-- 响应行
-- 响应头
-- 响应体
+上面也说了，GET 和 POST 只是一种 HTTP 规范，并不是强制的，因此可以根据特定情况进行修改，下面讲的是基本情况
 
-> ### 抓包分析
+- get 是请求资源，请求参数会放在 url 后面，post 是创建和更新数据，上传的数据会存储在 请求 body 中
 
-![1601992795130](C:\Users\蒜头王八\AppData\Roaming\Typora\typora-user-images\1601992795130.png)
+- get 是幂等的， 在浏览器回退没有问题，post 不是幂等的，在浏览器回退会再次创建资源
 
-第一行是响应行：
+- get 返回的数据会被浏览器主动 cache，post 不会，需要手动设置
 
-- HTTP 版本
-- 响应码
-- 响应码的描述
+- 一般情况下 post 会分两次发送，第一次发送请求头，第二次发送请求体
 
-后面是响应头：
+  - ```
+    分两次发送的目的：
+    服务器先获取请求头，获取里面的参数，判断 Athorization 是否能够通过认证、Content-Length 过大 或者 Content-Type 指定的数据格式不支持
+    判断完后服务器可以告知客户端是否需要发送请求体，如果拒绝处理，那么浏览器就不需要发送请求体
+    
+    如果是一次发送，如果此次 post 请求被拒绝的话，那么请求体的数据是无效的，但是它还是被传输过去了，占据带宽
+    
+    两次发送的缺点就是需要多一次发送的时间
+    ```
 
-- Date：当前的时间戳
-- Content-Type：返回的数据类型
-- Coonection：是否保持连接
+  - ```
+    当然，两次发送也并非是 HTTP 协议强制的，用户是可以自己设置的，可以协定如果 POST 的数据超过 1KB 那么就先发送请求头之类的，如果没有那么就一次发送
+    简而言之，所谓的 HTTP 协议都只是一种规范，可以根据具体场景来进行修改
+    ```
 
-最后是响应体：
-
-- 如果是请求的数据，那么存储的就是数据（比如我们查询数据库的那种数据），如果请求的是 HTML 代码，那么返回就是 HTML 代码
+    
 
 
+
+> ### post 和 put 的区别
+
+post 在 HTTP 协议中的语义是 创建资源，put 在 HTTP 协议中的语义是 更新资源
+
+创建资源可以重复创建多个，因此是非幂等的
+
+更新资源都是更新某个指定的资源，因此是幂等的
+
+**一般情况下用 POST 需要在后台进行幂等校验（比如建立流水表）来实现幂等**
+
+
+
+
+
+## 3、GET 和 POST 携带的消息大小
+
+GET 是将参数放在 URL 上的， HTTP 协议没有明确限制 URL 的长度，因此理论上 URL 多长都可以，即 GET 携带的参数无限
+
+但是，浏览器会对 URL 的长度进行限制，不同的浏览器的 URL 限制不同，比如 chrome 是 2MB
+
+(有种说法就是 IE 浏览器 URL 限制为 2KB，但是最近 IE 浏览器也使用 chrome 的内核了，因此这种说法慢慢的会变成历史)
+
+```
+注意：如果是包含中文的传输，中文经过编码后再传输，如果浏览器的编码格式是 UTF-8，那么编码后的一个中文大小为 9 B
+```
+
+
+
+POST 的 body 在 HTTP 协议上也没有明确的限制，所以理论上 body 多大都可以
+
+但显然，服务器会对这个 body 大小进行限制，总不能每次都传输一个的数据包都是一个 1GB 的文件，tomcat 默认是 2MB
+
+
+
+
+
+## 4、HTTP 报文结构
+
+[HTTP 报文结构]( https://juejin.im/post/6844904045572800525 )
+
+
+
+HTTP 请求报文 由 请求行、请求头、请求体 组成
+
+HTTP 响应报文 由 响应行、响应头、响应体 组成
+
+
+
+> ### HTTP 行
+
+请求行包括：HTTP 版本号、请求的 url、请求方式
+
+响应行包括：HTTP 版本号、状态码、状态码描述符（OK 之类的）
+
+
+
+> ### HTTP 头部
+
+HTTP 头部分为 `通用头部`、`请求头部`、`响应头部`、`实体头部`四种
+
+
+
+**通用头部：请求报文和响应报文通用的头部**
+
+- Date
+
+- Cache-Control
+
+  - ```java
+    Cache-Control: no-store	//不缓存
+    Cache-Control: no-cache	//如果有缓存，那么请求服务器判断缓存是否需要更新，如果资源没有更新，那么浏览器返回 304，告知浏览器继续使用缓存，一般情况下缓存静态资源时使用
+    Cache-Control: max-age=31536000	//表示缓存的有效时间，在浏览器记录 http 和 https 时使用
+    ```
+
+- Connection
+
+  - ```java
+    Connection: keep-alive	//长连接，默认设置方式
+    Connection: close		//短连接
+    ```
+
+
+
+**实体头部：用来记录 消息体 信息的头部**
+
+- Content-Length：消息体的大小，以字节为单位，一般是发送方携带
+
+- Content-Type：**消息体的 MIME 类型**（媒体类型：Multipurpose Internet Mail Extensions）以及**字符编码**
+
+  - ```java
+    Content-Type: text/html;charset:utf-8; //指定 body 中的数据格式为 html 文本，且编码为 utf-8
+    ```
+
+- Content-Language：自己能够接收的语言，用来表示 消息体数据 的语言，比如中文、英文
+
+  - ```
+    Content-Language: de-DE
+    Content-Language: en-US
+    Content-Language: de-DE, en-CA
+    ```
+
+- Content-Range：断点传续 可以使用，表示消息体内的数据 在 整个数据流的 位置范围
+
+  - ```java
+    Content-Range: bytes 0-499/22400	//0－499 是指当前发送的数据的范围，而 22400 则是文件的总大小。
+    ```
+
+- Expires：消息体数据过期时间
+
+  - ```java
+    Expires: Thu, 01 Jan 1970 00:00:00 GMT
+    ```
+
+    
+
+
+
+**请求头部：**
+
+- Host：请求的服务器的域名
+
+- Referer：请求的来源，告知服务器从哪个页面过来的
+
+- Accept：告知服务器能够接收的 MIME 的类型
+
+  - ```java
+    //文本文件： text/html、text/plain、text/css、application/xhtml+xml、application/xml
+    //图片文件： image/jpeg、image/gif、image/png
+    //视频文件： video/mpeg、video/quicktime
+    //应用程序二进制文件： application/octet-stream、application/zip
+    
+    Accept: text/html,application/xhtml+xml,application/xml;
+    ```
+
+    
+
+**响应头部：**
+
+- Set-Cookie：服务端创建 cooike，然后将 cookie 放在该字段中，让浏览器保存 cookie
+
+-  Access-Control-Allow-Origin ：服务器告知服务器允许 指定来源对资源进行访问
+
+  - ```java
+    Access-Control-Allow-Origin: https://mozilla.org  
+    Vary: Origin	//表示允许 https://mozilla.org 页面来源访问资源，如果是指定特定的来源，那么需要在 Vary 字段添加 Origin
+    
+    Access-Control-Allow-Origin: *  //表示允许 所有 来源访问资源
+    ```
+
+    
 
 
 
@@ -175,39 +298,26 @@ HTTP 响应报文包括：
 最原始的 HTTP 版本
 
 - 只 支持 GET 请求：由于不支持其他请求，而 GET 是在 URL 中携带请求信息的，因此客户端无法向服务端发送太多信息
-- 没有请求头/响应头 概念：不能指定版本号，同时只有一个版本，也无需指定，服务端只有返回 HTML 字符串的能力
-- 短连接，即响应请求后，无需再进行通信，断开连接
+- 服务端只能返回 HTML 字符串
+- 短连接
 
 
-
-HTTP 0.9 的局限性很大，能做的事很少
 
 
 
 ### 2、HTTP 1.0
 
-- 新增了 POST、DELETE、PUT 等方式
-- 增加了 请求头/响应头的概念，在请求/响应头 中指定 HTTP 版本号，以及状态码、权限、编码等
+- 新增了 POST、PUT、DELETE 等方式
+- 增加了 请求头/响应头、状态码、缓存 (此时的缓存类型较为简单) 等
 - 扩充了传输内容，可以传输图片、音频、二进制数据等
 
-- 无状态：服务端不会保存客户端的信息，这样就不会占用服务器内存
-  - 可以通过 cookie/session 机制来做身份认证和状态记录
 
 
 
 HTTP 1.0 的缺点：
 
-- 使用的是短连接，一次  HTTP 请求后都会断开连接（可以通过服务器配置支持多次），每次都需要进行 三次握手、慢启动、四次挥手，频繁通信情况下效率低，   其中 慢启动 主要对文件类大的传输影响大
-- 存在 HTTP 队头阻塞
-
-
-
-
-
-> ### 队头阻塞
-
-- TCP 队头阻塞：即使使用滑动窗口，当一个数据包丢失，它将会导致后续的数据包无法发送，该数据包会重传直到接受方接收到发送 ACK 并且发送方接收到 ACK 为止
-- HTTP 队头阻塞：请求 和 请求之间是有顺序的，下一个请求必须在上一个请求得到服务端响应后才能发出去，如果上一个请求阻塞了，那么后面的请求都会阻塞
+- **短连接：**一次  HTTP 请求后都会断开连接（可以通过服务器配置支持多次），每次都需要进行 三次握手、慢启动、四次挥手，频繁通信情况下效率低，   其中 慢启动 主要对文件类大的传输影响大
+- **HTTP 队头阻塞：**请求 和 请求之间是有顺序的，下一个请求必须在上一个请求得到服务端响应后才能发出去，如果上一个请求阻塞了，那么后面的请求都会阻塞
 
 
 
@@ -215,12 +325,24 @@ HTTP 1.0 的缺点：
 
 ### 3、HTTP 1.1
 
+- 长连接：新增了 Connection 字段
 
+- 管道化：管道化使得每个请求可以无需等待上一个请求响应即可发出去，不过响应还是按照请求的顺序返回
 
-- 新增长连接：新增了一个 Connection 字段，里面有个 keep-alive 字段，可以设置保持连接不断开，以此成为长连接，因此一个  TCP 连接可以处理多个请求；HTTP1.1 是默认长连接的
-- 管道化：对 HTTP 1.0 的修改，**管道化使得每个请求可以无需等待上一个请求响应即可发出去，不过响应还是按照请求的顺序返回**
-- 缓存处理：新增字段：cache-control，对于 get 请求，浏览器会先看看自己是否有缓存，如果有，那么直接用，如果没有再请求，然后进行缓存，通过 cache-control 字段来控制缓存
-- 断点传输：资源过大，可以分割传输，并且遇到网络故障的情况下，下次传输也可以从上次传输的地方接着传输
+- 更强大的缓存：Cache-Control
+
+- 断点传输：请求头部使用 Range，响应头部使用 Content-Range
+
+  - ```java
+    Range: bytes=0-499 //表示第 0-499 字节范围的内容
+    Range: bytes=500-999 //表示第 500-999 字节范围的内容
+    Range: bytes=-500 //表示最后 500 字节的内容
+    Range: bytes=500- //表示从第 500 字节开始到文件结束部分的内容
+    Range: bytes=0-0,-1 //表示第一个和最后一个字节
+    Range: bytes=500-600,601-999 //同时指定几个传输范围
+    ```
+
+    
 
 
 
@@ -248,7 +370,7 @@ TCP 没有断开，用的同一个通道
 
 这是为了防止服务器返回 响应的时候，如果不按照顺序的话，那么服务器不知道相应对应哪个请求
 
-本质上还是没有解决 HTTP 队头阻塞的问题
+**本质上还是没有解决 HTTP 队头阻塞的问题**
 
 
 

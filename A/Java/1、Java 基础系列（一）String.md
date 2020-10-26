@@ -1,6 +1,8 @@
 # String
 
-## 1、String 为什么设计为不可变和不可继承
+## 1、String 的不可变和不可继承
+
+### 1、不可变
 
 > ### 什么是不可变？
 
@@ -15,31 +17,32 @@ String 类源码如下：
 ```java
 public final class String implements java.io.Serializable, Comparable<String>, CharSequence {
     private final char value[];
+    
+    //do something
+}
 ```
 
-String 内部封装了一个 char[] 数组，String 对应的数据就是存储在这个 char[] 数组中的
+String 底层实现是一个 char[] 数组，跟 C 和 SDS 的字符串实现一样
 
 这个 char[] 数组使用 final 修饰，这样就导致了不能将 char[] 数组 引用变量 重新指向新的引用
 
+但是需要注意的是，final 修饰的 char[] 只是引用不可变，但是内部数据是可变的
 
-
-我们需要知道，final 修饰的变量，指针变量不能够发生改变，但是它内部的值可以发送改变，比如
-
-```java
-final char[] chs = {'a', 'b'};
-chs[0] = 'b'; //这是可以的
-chs = new char[2]; //这是不可以的
-```
-
-
-
-既然 char[] 内部的值可以改变，那么为什么不直接修改呢？因为 char[] 数组使用 private 修饰，我们外面无法访问到，这就导致了 String 的不可变的特性，如果是 public 的，那么我们可以直接获取 char[] 然后修改它的值了
+而如果提供修改 char[] 数组内部数据的 api，那么就跟 StringBuilder 一样了，就失去了 String 的不可变这一特点
 
 
 
 > ### String 为什么设计为 不可变
 
-**为了安全**
+有两个优点：
+
+- 安全
+
+- 可以用作常量放入字符串常量池中进行复用
+
+
+
+**安全：**
 
 因为字符串是最常用的，而它也经常作为方法参数进行传参，在方法内部不可避免的会修改字符串的值，这就是问题所在
 
@@ -78,19 +81,25 @@ class A{
 
 
 
-并且 String 借助这个不可变性还有一个常量池属性，即它可以添加到常量池中，被多个引用进行复用，而不用创建重复的对象，节省空间 
+**复用：**
+
+String 借助这个不可变性还有一个常量池属性，即它可以添加到常量池中，被多个引用进行复用，而不用创建重复的对象，节省空间 
 
 如果可变，那么这个就失去了意义了，因为这个值随时可能被改变，这样就会影响到其他的引用
 
 
 
+### 2、不可继承
+
+
+
 > ### String 为什么不可继承
 
-同样是这个源码
-
 ```java
+//使用 final 修饰
 public final class String implements java.io.Serializable, Comparable<String>, CharSequence {
-    private final char value[];
+    //do something
+}
 ```
 
 String 类使用 final 修饰，表示该类不可被继承
@@ -99,7 +108,7 @@ String 类使用 final 修饰，表示该类不可被继承
 
 > ### String 为什么设计为不可继承
 
-设置为不可继承，那么方法就不能被重写，这样才通用，**主要是 String 是一个基础类，很多的类都使用了 String**
+设置为不可继承，那么方法就不能被重写，这样才通用，**String 是一个基础类，很多的 JDK 定义的基础类都使用了 String**
 
 如果用户的一个类继承 String 重写了 String 的方法，那么在其他类中本来是传入 String，使用的是 String 的方法逻辑的，却传入了用户自己写的类，导致对应的方法逻辑出现问题
 
@@ -464,7 +473,7 @@ s1 和 s2 都是 "hello"
 
 ## 3、使用 String 作为锁对象
 
-由于 sync 锁它是通过 OOP 对象头的 Mark 信息来记录的，因此它只认堆中的对象
+sync 锁 是通过 OOP 对象头的 Mark 字段中的 monitor 对象来记录锁信息的，因此它只认堆中的对象
 
 对于 String，即使它们的值是相同的，但如果在堆中是不同的对象，那么最终锁的也是不同的对象
 

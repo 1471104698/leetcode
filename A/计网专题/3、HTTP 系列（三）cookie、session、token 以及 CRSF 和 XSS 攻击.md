@@ -54,7 +54,7 @@
 
 当浏览器禁用 cookie 时，存在两种验证方式：
 
-- 浏览器保存 sessionID，然后在请求的时候直接发送 sessionID，这种的服务器需要存储 session
+- 浏览器只保存 sessionID
 - 浏览器保存 token
 
 
@@ -65,20 +65,151 @@ session
 
 - 需要服务端存储，当有大量用户的时候会占内存
 - 在分布式的情况下需要考虑 session 共享问题
-- 可能会发生 CSRF 攻击
+- 依赖于 cookie，会发生 CSRF 攻击
 
 token
 
 - 服务端无需存储，节省内存
-- 防止 CSRF 攻击
+- 无需考虑分布式的问题
+- 不依赖于 cookie，可以放在 HTTP header 中，防止 CSRF 攻击
+
+
+
+## 2、JWT
+
+具体看  http://blog.leapoahead.com/2015/09/06/understanding-jwt/ 
+
+
+
+token 的一个主流实现是 JWT（JSON Web Token），JWT 的数据形式都是 JSON 
+
+ JWT 实际上就是一个字符串，它由三个部分组成：头部 Header、载荷 Payload、签名 Signature 
+
+
+
+**头部 Header：**
+
+```json
+{
+  "typ": "JWT",
+  "alg": "HS256"
+}
+```
+
+描述 该 JWT 的基本信息，以及生成签名使用的 散列算法
+
+使用 base64 编码后变成
+
+```java
+eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9
+```
+
+
+
+**载荷 payload：**
+
+```json
+{
+    "iss": "server JWT",
+    "iat": 1441593502,
+    "exp": 1441594722,
+    "aud": "www.example.com",
+    "sub": "userId",
+    "from_user": "B",
+    "target_user": "A"
+}
+```
+
+payload 存储了 JWT 的签发信息和过期信息
+
+- iss：签发者
+- aud：接收该 token 的域名
+- sub：接收该 token 的用户
+- exp：过期时间
+
+使用 base64 编码后变成：
+
+```json
+eyJmcm9tX3VzZXIiOiJCIiwidGFyZ2V0X3VzZXIiOiJBIn0
+```
+
+
+
+**签名：**
+
+将上面的 头部 和 载荷 进行拼接，中间用 `.` 隔开，变成：
+
+```java
+eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJmcm9tX3VzZXIiOiJCIiwidGFyZ2V0X3VzZXIiOiJBIn0
+```
+
+然后需要再提供一个 密钥（secret），比如我们使用 secret = "mystar" 作为密钥，然后跟上面的拼接字符串一起使用 HS256 算法进行 hash，那么得到的 签名为：
+
+```java
+rSWamyAYwuHCo7IFAgd1oRpSP7nzL7BF5t7ItqpKViM
+```
+
+<img src="http://blog.leapoahead.com/2015/09/06/understanding-jwt/sig1.png" style="zoom:50%;" />
 
 
 
 
 
-## 2、CSRF 攻击
+ 最终得到的 JWT 为：头部 + 载荷 + 签名
 
-CSRF 就是未经本人许可以本人的名义发送恶意请求（修改密码，银行转账等）
+```
+eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJmcm9tX3VzZXIiOiJCIiwidGFyZ2V0X3VzZXIiOiJBIn0.rSWamyAYwuHCo7IFAgd1oRpSP7nzL7BF5t7ItqpKViM
+```
+
+
+
+> ### 签名的作用
+
+签名的作用是为了防止别人篡改伪造 JWT，比如当中间人篡改了 payload，然后使用相同的 散列算法生成 signature，
+
+由于信息发生了改动，并且中间人并不知道生成 signature 时的密钥（secret），因此最终生成的 signature 是不一致的
+
+<img src="http://blog.leapoahead.com/2015/09/06/understanding-jwt/sig2.png" style="zoom:50%;" />
+
+
+
+ 因此服务器根据 Header 中提供的散列算法以及自己存储的密钥 对 Header 和 Payload 进行 hash，如果发现和 JWT 中的签名不一致，那么意味着 JWT 被篡改，那么服务器应该拒绝这个请求
+
+
+
+> ### 信息暴露？
+
+我们可以发现，JWT 中的 Header 和 Payload 相当于是明文传输，因此 JWT 不用来存储敏感信息，一般就是存储用户的 id
+
+如果想要存储重要信息，那么可以使用 HTTPS 来进行传输
+
+
+
+> ### JWT 的鉴定流程
+
+![preview](https://pic3.zhimg.com/v2-f1556c71042566d4a6f69ee20c2870ae_r.jpg) 
+
+上面的 SHA256、HMAC、Base64 算法 都不是一个加密算法
+
+Base64 是一个编码算法，是为了让数据更快的传输，编码后的数据是可以直接翻译成原文的
+
+SHA256、HMAC 是散列算法，用来生成 签名 （signature 或者 信息摘要），这个算法就跟 CA 证书上的 散列算法一致，都是用来生成  signature 的
+
+
+
+
+
+
+
+
+
+
+
+
+
+## 3、CSRF 攻击
+
+CSRF 攻击 就是黑客 未经本人许可 以 本人 的名义发送恶意请求（修改密码，银行转账等）
 
 CSRF 攻击原理是 **浏览器分不清发起请求的是否是用户本人，每次请求都会带上 cookie，而 cookie 内部又有用于验证身份的 sessionid**
 
@@ -100,13 +231,12 @@ CSRF 防范手段：
 
 - 使用验证码：比如转账这种重要请求，就不能单单只是靠 cookie，而是需要发送验证码让用户自己确认是否执行这个请求，在一定强度的验证码下，中间人机器是无法识别的，比如图片高斯模糊，然后给定很多个文字，让点某个文字
 - 添加 Referer 字段：从上面的 HTTP 请求报文头部我们可以看出来存在这么一个字段，它指向的是发起请求的来源地址，对于本次转账请求，来源地址就是 网站 B；服务端需要做的是就是验证这个网站是否是信任网站，不是的话则拒绝响应
-- token 验证：
 
 
 
 
 
-## 3、XSS 攻击 - 脚本注入攻击
+## 4、XSS 攻击 - 脚本注入攻击
 
 百度百科：
 

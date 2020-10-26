@@ -347,7 +347,7 @@ class InstanceKlass: public Klass {
     // 保存当前类所有default方法在虚函数表中的位置信息
     Array<int>*     _default_vtable_indices;
     /*
-  _fields 保存 当前类的 field 信息 （包括static field），数组结构为：
+  _fields 保存 当前类的 所有 field 信息 （包括static field），数组结构为：
       f1: [access, name index, sig index, initial value index, low_offset, high_offset]
       f2: [access, name index, sig index, initial value index, low_offset, high_offset]
             ...
@@ -355,6 +355,8 @@ class InstanceKlass: public Klass {
       [generic signature index]	泛型签名信息
       [generic signature index]
   		...
+  		
+  	这里存储的是 变量的信息，不存储变量值，静态变量值存储在 Class 对象，普通变量值存储在 OOP 对象体
   */
     Array<u2>*      _fields;
     ...

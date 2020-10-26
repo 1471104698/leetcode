@@ -4,7 +4,7 @@
 
 ## InnoDB 和 mysiam 引擎的区别
 
-InnoDB 支持事务，mysiam 不支持事务
+1、InnoDB 支持事务，mysiam 不支持事务
 
 ```
 InnoDB 每次都需要将 sql 语句封装进事务里来保证原子性
@@ -13,7 +13,7 @@ InnoDB 使用 undo log 来回滚数据，使用 redo log 数据延迟写回磁�
 
 
 
-InnoDB 支持外键，而 mysiam 不支持
+2、InnoDB 支持外键，而 mysiam 不支持
 
 ```
 带有外键的 InnoDB 表无法转换为 mysiam
@@ -21,7 +21,7 @@ InnoDB 支持外键，而 mysiam 不支持
 
 
 
-InnoDB 支持表锁和行锁，而 mysiam 只支持表锁
+3、InnoDB 支持表锁和行锁，而 mysiam 只支持表锁
 
 ```
 由于 InnoDB 锁的粒度更小，所以 InnDB 并发度高，在写方面效率更高
@@ -29,7 +29,7 @@ InnoDB 支持表锁和行锁，而 mysiam 只支持表锁
 
 
 
-InnoDB 和 mysiam 索引数据结构都是 B+ 树，但是 InnoDB 有 聚簇索引 和 非聚簇索引两种，而 mysiam 只有 非聚簇索引
+4、InnoDB 和 mysiam 索引数据结构都是 B+ 树，但是 InnoDB 有 聚簇索引 和 非聚簇索引两种，而 mysiam 只有 非聚簇索引
 
 ```
 InnoDB 有两个文件，一个是 .frm，表结构，一个是 .ibd，存储数据和索引，而数据就是聚簇索引，其他的非聚簇索引都指向这个聚簇索引
@@ -38,7 +38,7 @@ mysiam  有三个文件，一个是 .frm 表结构，一个是 .myd 数据文件
 
 
 
-mysiam 内部维护了一个 count 字段记录表中数据量
+5、mysiam 内部维护了一个 count 字段记录表中数据量
 
 ```
 InnoDB 查询表中数据量时，需要调用 select count(*) from t，通过 全表扫描 统计表中数据行数
@@ -48,7 +48,7 @@ mysiam 直接获取 count 字段即可
 
 
 
-InnoDB 必须带主键，mysiam 可以没有
+6、InnoDB 必须带主键，mysiam 可以没有
 
 具体看 <https://zhuanlan.zhihu.com/p/98084061>
 
@@ -66,7 +66,7 @@ row_id 是某个数据库下所有 InnoDB 表全局共享的，
 
 
 
-InnodB 不支持全文索引（后续版本支持了），mysiam 支持全文索引
+7、InnodB 不支持全文索引（后续版本支持了），mysiam 支持全文索引
 
 ```
 如果在 mysql 不支持的版本下，mysiam 对 %abc% 建立全文索引那么查询效率也提高了很多

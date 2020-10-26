@@ -34,24 +34,9 @@ Klass 对象中包含了某个类的所有元数据信息
 - `Class.forName()`
 - 实例对象`.getClass()`
 
-获取成员变量以及进行修改
+ getFields、getMethods 和 getConstructors 获取该类的 public 变量 和 方法，包括父类的 public 变量 和 方法，包括 static 
 
-- 获取 public 修饰的所有成员变量：`clazz.getFields()`
-- 获取 public 修饰的指定的某个成员变量：`clazz.getField(String name);`
-- 获取所有成员变量：`clazz.getDeclaredFields()`
-- 获取某个指定的成员变量：`clazz.getDeclaredField(String name)`
-- 设置某个成员变量的修改权限（比如 final 修饰）：`field.setAccessible(true);`
-
-获取对象的成员方法
-
-- 获取 public 修饰的所有构造方法：`clazz.getConstructors();`
-- 获取 public 修饰的某个构造方法，没有参数就是无参：`clazz.getConstructor();`
-- 获取所有构造方法：`clazz.getDeclaredConstructors();`
-- 获取某个构造方法，一般是无参：`clazz.getDeclaredConstructor();`
-- 通过构造方法实例化对象：`Object o = constructor.newInstance();`
-- 获取 public 修饰的成员方法：`Method getA = clazz.getMethod("getA");`
-- 获取某个成员方法, 不能包括继承的方法：`Method getA = clazz.getDeclaredMethod("getA");`
-- 调用成员方法，参数为指定执行的是哪个对象：`getA.invoke(o);`
+  getDeclaredFields、 getDeclaredMethods 和 getDeclaredConstructors 可以获取该类的所有 变量 和 方法，但是无法获取父类的变量和方法
 
 
 

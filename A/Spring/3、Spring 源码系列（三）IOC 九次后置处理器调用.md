@@ -509,7 +509,7 @@ protected Object wrapIfNecessary(Object bean, String beanName, Object cacheKey) 
 
 ## 7、第九次后置处理器
 
-在调用 ac.close() 的时候，会调用 InitDestroyAnnotationBeanPostProcessor 后置处理器去回调 bean 的 @PreDestroy 注解的方法
+在销毁 bean 比如调用 ac.close()，会调用 InitDestroyAnnotationBeanPostProcessor 后置处理器去回调 bean 的 @PreDestroy 注解的方法
 
 调用流程如下：
 

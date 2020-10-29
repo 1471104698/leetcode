@@ -12,7 +12,7 @@ HT 是线程安全的，所有方法都加了 synchronized 锁
 
 
 
-HM 的 key 允许一个空值，value 允许多个空值
+HM 的 key 只存在一个位置为空值，value 允许空值，并且 key 为 null 时，get() 得到的结果也为 null，因为它无法分辨之前是否存储过 key = null 的情况，因此统一返回 null，所以 put(null, xx) 也没什么意义
 
 HT 的 key 和 value 都不允许空值
 
@@ -22,13 +22,17 @@ HM 的默认容量是 16，后续扩容直接 * 2，即 cap << 1，这样就能�
 
 HT 的默认容量是 11，后续扩容是 2 * old + 1
 
+```java
+int newCapacity = (oldCapacity << 1) + 1;
+```
+
 
 
 HM 的迭代方式是 iterator
 
 HT 的迭代方式是 Enumeration + Iterator
 
-- 前一种支持修改，但不属于 fail-safe，因为它什么都没做
+- 前一种支持修改，但不属于 fail-safe，因为它没有任何的检验和操作
 - 后一种不支持修改，是 fail-fast
 
 HT 在遍历的时候跟 HM 一样，不是线程安全的，只有在 put()、get() 的时候才是线程安全的

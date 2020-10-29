@@ -118,7 +118,9 @@ String 类使用 final 修饰，表示该类不可被继承
 
 ## 2、String 的 intern()
 
-具体看  https://www.zhihu.com/question/55994121 
+[字符串常量池](https://www.zhihu.com/question/55994121 )
+
+
 
 intern() 涉及到 字符串常量池，这里根据字节码来说明下字符串常量池的存储
 
@@ -435,12 +437,12 @@ public class A {
 class NewTest2 {
     public static void main(String[] args) {
         String s1 = new String("he") + new String("llo");
-        String s2=new String("h")+new String("ello");
-        String s3=s1.intern();
-        String s4=s2.intern();
-        System.out.println(s1==s3); 
-        System.out.println(s1==s4);
-        System.out.println(s1==s2);
+        String s2 = new String("h") + new String("ello");
+        String s3 = s1.intern();
+        String s4 = s2.intern();
+        System.out.println(s1 == s3); 
+        System.out.println(s1 == s4);
+        System.out.println(s1 == s2);
     }
 }
 ```
@@ -465,9 +467,69 @@ s1 和 s2 都是 "hello"
 
 
 
-这里普通的讲一个情况就好了，其他的情况都是类似的，反正都是去字符串常量池中查找，没有就添加引用，有就返回引用
+> ### 关于 new String("abc") 个人推测
 
+首先，上面已经说了 intern() 会先去字符串常量池中查找是否存在该字符串，如果不存在那么将 调用该方法的字符串的在堆中的引用存储到 字符串常量池中，如果存在则直接返回
 
+如果是在代码中显示的表示字面量，比如 `String s = "abc"`，那么会自动对 "abc" 执行一条 ldc 指令，如果是第一次出现 abc，那么这时候会自动在 堆中 创建 值为"abc" 的 String 的 OOP 对象体，然后将引用返回，存储到字符串从常量池中
+
+这样的话，对于如下代码：
+
+```java
+String s = new String("abc");
+```
+
+经过 javap -v 得到 JVM 指令如下：
+
+```java
+ public static void main(java.lang.String[]) 
+    descriptor: ([Ljava/lang/String;)V
+    flags: ACC_PUBLIC, ACC_STATIC
+    Code:
+      stack=3, locals=2, args_size=1
+         0: new           #2                  // class java/lang/String
+         3: dup
+         4: ldc           #3                  // String abc
+         6: invokespecial #4                  // Method java/lang/String."<init>":(Ljava/lang/String;)V
+         9: astore_1
+        10: return
+
+```
+
+- 先执行 new 指令，在堆中创建一个 OOP 对象体
+
+- 对 "abc" 执行 ldc，此时字符串常量池中没有，那么在堆中创建，然后返回引用
+- 调用 String 的构造方法
+
+重点就是这个构造方法
+
+```java
+public final class String{
+    private final char value[];
+    private int hash; // Default to 0
+    
+    //构造方法
+    public String(String original) {
+        //当前 String 对象 和 original 对象的 char[] 数组指向同一个
+        this.value = original.value;
+        this.hash = original.hash;
+    }
+}
+```
+
+String 的底层是维护一个 char[] 数组
+
+我们可以看出，String 的这个入参构造方法是将传入的 String 的 char[] 数组赋值给 当前 String 的 char[] 数组
+
+而 new String("abc") 应该是从 字符串常量池中获取 "abc" 字符串的引用，这个引用所引用的对象是调用了 ldc 指令并在堆中创建了的 OOP 对象
+
+这意味着什么？ 
+
+意味着 String s 中的 char[] 数组 和 ldc 指令创建的 "abc" 字符串底层使用的是同一个 char[] 数组
+
+<img src="https://pic.leetcode-cn.com/1603788082-ICxpKm-image.png" style="zoom:70%;" />
+
+虽然它们底层的 char[] 数组是同一个，但是由于 s1 == s2 比较的是外层的 String 对象，由于 String OOP 对象是不同的，所以即使内部的 char[] 数组是同一个对象，也会返回 false
 
 
 

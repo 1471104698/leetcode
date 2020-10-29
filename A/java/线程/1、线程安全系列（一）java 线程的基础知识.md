@@ -50,11 +50,11 @@ public void h(){
 
 > ### wait(1000)与sleep(1000)的区别
 
-sleep(1000) 表示将线程挂起，在未来的 1000ms 内不参与竞争 CPU，在 1000ms 后，会取消挂起状态，参与竞争 CPU ，这时不一定 CPU 就立马调度它，因此它等待的时间的 >= 1000ms
+sleep(1000) 表示将线程挂起，在未来的 1000ms 内不参与竞争 CPU，在 1000ms 后，会取消挂起状态，参与竞争 CPU ，这时不一定 CPU 就立马调度它，因此它**等待的时间的 >= 1000ms**
 
 
 
-wait(1000) 跟 wait() 的差别在于 wait(1000) 不需要 notify() 来唤醒，它等待 1000ms 后，如果此时没有线程占有锁，那么它会自动唤醒尝试获取锁 
+wait(1000) 跟 wait() 的差别在于 **wait(1000) 不需要 notify() 来唤醒**，它等待 1000ms 后，如果此时没有线程占有锁，那么它会自动唤醒尝试获取锁
 
 
 
@@ -110,7 +110,8 @@ wait(1000) 跟 wait() 的差别在于 wait(1000) 不需要 notify() 来唤醒，
 
 - 继承 Thread 并重写 run()
 - 实现 Runnable 接口 重写 run()，并通过 Thread 来运行
-- 实现 Callable 接口 并实现 call()（类似 run()）并使用 FutureTask 进行封装，因为 FutureTask 实际上也是一个 Runnable 类，所以是屏蔽了 Callable 和 Runnable 的差异
+- 实现 Callable 接口 并实现 call()（类似 run()）并使用 FutureTask 进行封装
+- 线程池的 execute() 和 submit()
 
 
 

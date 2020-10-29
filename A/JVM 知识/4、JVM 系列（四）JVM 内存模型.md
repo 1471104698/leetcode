@@ -54,7 +54,7 @@ JDK 1.8 的 JVM 内存空间如下：
 
 > ### 栈帧
 
-具体看 <https://blog.csdn.net/qian520ao/article/details/79118474>
+[栈帧包含什么？](<https://blog.csdn.net/qian520ao/article/details/79118474>)
 
 
 
@@ -94,11 +94,15 @@ E区 ：S0：S1 = 8：1：1
 
 **字符串常量池：**
 
-JDK 6 在方法区中，存储字符串对象， JDK 7 在堆中，存储对堆中字符串对象的引用
+​	JDK 6 在方法区中，存储字符串对象， JDK 7 转移到堆中，存储对堆中字符串对象的引用
 
 
 
 **运行时常量池：**
+
+​	JDK 7 还有永久代时在方法区中，JDK 8 移除永久代，替换为元空间，元空间在物理内存上，此时运行时常量池转移到堆中
+
+​	即 JDK 8 的时候 字符串常量池 和 运行时常量池 都存在于堆中了
 
 class 文件中除了 类、方法、接口的描述符之类的，还有 常量池，这部分存储了字面量 和 符号引用（即方法的 Code 属性需要的，记录的是某个方法调用的方法、字段等）， 类加载后这部分会存储到到运行时常量池中
 
@@ -196,7 +200,12 @@ JVM 其实并不是会一直等到年龄到达一个阈值才会将对象晋升�
 
 **堆 OOM：**堆是线程共享的，当一个线程为一个对象申请分配内存的时候，如果堆内存空间不够，就会触发 GC，如果 GC 之后还是无法分配，那么就会产生 堆 OOM
 
-**栈 OOM 和 本地方法栈 OOM：**栈是线程私有的，存储的是方法调用链中的每个栈帧，它有一定的大小，即调用的方法数是有限的，死循环调用会出现 StackOverflowError ，无限创建线程会出现 OOM（Unable to create new native thread）
+- -Xms：初始堆内存大小，默认为 物理内存 1/64
+- -Xmx：最大堆内存大小，默认为 物理内存 1/4
+
+**栈 OOM **：系统分配给每个进程的空间是有限的，每个线程都会占用一定的内存，如果无限创建线程会出现 栈OOM，这里的栈 OOM 实际上是系统内存 OOM，不过是由于 栈分配引起的，所以说是 栈 OOM
+
+- -Xss：每个线程栈的内存大小，默认为 512KB - 1M
 
 **方法区 OOM：**方法区是存储类的元数据 ，它的大小也是有限的，如果加载过多的类，再加载新的类的时候无法分配空间，那么就会产生 方法区 OOM，(这时候所有的线程都会受到影响)
 
@@ -206,9 +215,9 @@ JVM 其实并不是会一直等到年龄到达一个阈值才会将对象晋升�
 
 > ### 内存泄漏
 
-内存泄漏会导致 OOM，即内存泄漏是导致 OOM 的原因之一
 
 
+**内存泄漏是导致 OOM 的原因之一**
 
 **JVM 对内存进行全权管理，从自动分配到垃圾回收，为什么还会发生内存泄漏？**
 
@@ -268,43 +277,73 @@ class stack {
 
 ## 4、静态变量、全局变量、局部变量、 和 常量存储位置
 
-静态变量： JDK 1.7 后从方法区中移除，放入到 Class 对象中，而 Class 对象存储在 堆中
+**静态变量：** JDK 1.7 后从方法区中移除，放入到 Class 对象中，而 Class 对象存储在 堆中
 
-全局变量：某个类实例化时进行初始化，是属于某个类实例的，因此跟类实例一样存储在堆中
+**全局变量：**某个类实例化时进行初始化，是属于某个类实例的，因此跟类实例一样存储在堆中
 
-局部变量：属于某个方法的，方法的具象化是用栈帧来表示的，局部变量存储在局部变量表中，基础类型的局部变量（int）存储的是值，非基础类型的局部变量（User）存储的是引用，而局部变量表是栈帧的一部分
+**局部变量：**属于某个方法的，方法的具象化是用栈帧来表示的，局部变量存储在局部变量表中，基础类型的局部变量（int）存储的是值，非基础类型的局部变量（User）存储的是引用，而局部变量表是栈帧的一部分
 
 
 
-常量：
+**final 和 static final 常量：**
 
-假设定义了这些常量
+
 
 ```java
-final int i = 10;
-final String s = "abc";
-final double d = 123.00987d;
-final float f = 10.001f;
+public class A{
+    final static long l = 2L;
+    final String s = "abc";
+    final String s1 = new String("abc");
+    final double d = 123.00987d;
+    final float f = 10.001f;
+    final int N = 2;
+}
 ```
 
-解析字节码如下：
+javap -v 后如下：
 
-```text
-Code:
-stack=2, locals=8, args_size=1
-0: iconst_1
-1: istore_1
-2: bipush        10			//int i = 10
-4: istore_2
-5: ldc           #2         // String abc	常量池中的位置
-7: astore_3
-8: ldc2_w        #3			// double 123.00987d	常量池中的位置
-11: dstore        4
-13: ldc           #5 		// float 10.001f	常量池中的位置
-15: fstore        6
-16: return
+```java
+//该字节码描述的是 A 的构造方法 ，即如果调用 new A()，那么初始化的变量如下，由于 l 不是 OOP 对象，所以不会在这里初始化
+public cur.A();
+    descriptor: ()V
+    flags: ACC_PUBLIC
+    Code:
+      stack=4, locals=1, args_size=1
+         0: aload_0
+         1: invokespecial #1                  // Method java/lang/Object."<init>":()V
+         4: aload_0
+         5: ldc           #2                  // String abc 
+             		//需要先将 符号引用 #2 转换为直接引用
+             					1.1、执行 s = "abc"，ldc 指令，如果常量池没有，则在堆中创建 "abc"，将引用放入常量池
+         7: putfield      #3                  // Field s:Ljava/lang/String;
+             					1.2、将上面 lac 返回的引用赋值给 s
+        10: aload_0
+        11: new           #4                  // class java/lang/String
+            					2.1、执行 s1 = new String("abc") 中的第一步，创建 String 的 OOP 对象
+        14: dup
+        15: ldc           #2                  // String abc
+            					2.2、执行 ldc 执行，这里获取的是上面 ldc 存入的引用
+        17: invokespecial #5                  // Method java/lang/String."<init>":(Ljava/lang/String;)V
+            					2.3、执行 new String("abc") ，调用构造方法
+        20: putfield      #6                  // Field s1:Ljava/lang/String;
+            					2.4、将 OOP 对象赋值给 s1
+        23: aload_0
+        24: ldc2_w        #7                  // double 123.00987d
+        27: putfield      #9                  // Field d:D
+        30: aload_0
+        31: ldc           #10                 // float 10.001f
+        33: putfield      #11                 // Field f:F
+        36: aload_0
+        37: iconst_2
+        38: putfield      #12                 // Field N:I
+        41: return
+}
 ```
 
-可以看出，final 修饰的变量在编译时期产生的字节码 与普通的变量没有区别，意味着是在编译阶段就保证了 final 的不变性，即通过各个代码判断是否被发生改变，如果发生了改变，那么编译就不通过，而在后续编译完成的 字节码就是当作普通的变量来对待
+final 和 static final 修饰的变量在编译时期产生的字节码 与普通的变量没有区别（虽然这里看不出 static final，但实际上一样的）
 
-所以，被 final 修饰的变量，该存哪还是存哪
+意味着是在编译阶段就保证了 final 的不变性，即通过各个代码判断是否被发生改变
+
+如果发生了改变，那么编译就不通过，而在后续编译完成的 字节码就是当作普通的变量来对待
+
+所以，被 final 修饰的变量，该存哪还是存哪，final 就存储在堆的 OOP 对象中，static final 就存储在 堆中的 Class 对象中

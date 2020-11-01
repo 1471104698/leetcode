@@ -2,7 +2,7 @@
 
 ## 1、cookie、session、token 的关系
 
-> ### cookie、session、token 产生的背景
+### 1、产生的背景
 
 具体看：
 
@@ -38,7 +38,7 @@
 
 
 
-> ### cookie、session、token 是什么？
+### 2、cookie、session、token 是什么？
 
 **cookie**：cookie 是浏览器的一段纯文本信息，用户第一次访问时服务端会生成一个 cookie 和 一个 session，然后将 session 中的 JSESSIONID存储在 cookie 中，返回给客户端存储，**浏览器上每个域名对应一个 cookie**，每次发送请求前浏览器会自动去查看 是否缓存了对应域名的 cookie，如果有则获取然后一并发送给服务端
 
@@ -59,29 +59,17 @@
 
 
 
-> ### token 相比 session 的优点
-
-session 
-
-- 需要服务端存储，当有大量用户的时候会占内存
-- 在分布式的情况下需要考虑 session 共享问题
-- 依赖于 cookie，会发生 CSRF 攻击
-
-token
-
-- 服务端无需存储，节省内存
-- 无需考虑分布式的问题
-- 不依赖于 cookie，可以放在 HTTP header 中，防止 CSRF 攻击
-
 
 
 ## 2、JWT
 
-具体看  http://blog.leapoahead.com/2015/09/06/understanding-jwt/ 
+### 1、JWT 组成
+
+[JWT 组成](http://blog.leapoahead.com/2015/09/06/understanding-jwt/ )
 
 
 
-token 的一个主流实现是 JWT（JSON Web Token），JWT 的数据形式都是 JSON 
+JWT（JSON Web Token） 的数据形式都是 JSON 
 
  JWT 实际上就是一个字符串，它由三个部分组成：头部 Header、载荷 Payload、签名 Signature 
 
@@ -91,8 +79,8 @@ token 的一个主流实现是 JWT（JSON Web Token），JWT 的数据形式都�
 
 ```json
 {
-  "typ": "JWT",
-  "alg": "HS256"
+  "typ": "JWT",		//token 类型
+  "alg": "RS256"	//签名使用的加密算法
 }
 ```
 
@@ -110,22 +98,15 @@ eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9
 
 ```json
 {
-    "iss": "server JWT",
-    "iat": 1441593502,
-    "exp": 1441594722,
-    "aud": "www.example.com",
-    "sub": "userId",
-    "from_user": "B",
-    "target_user": "A"
+    "iss": "server JWT",	//签发者
+    "iat": 1441593502,		//签发时间
+    "exp": 1441594722,		//过期时间
+    "aud": "www.example.com", //接收该 token 的域名
+    "sub": "userId",		//接收该 token 的用户
 }
 ```
 
 payload 存储了 JWT 的签发信息和过期信息
-
-- iss：签发者
-- aud：接收该 token 的域名
-- sub：接收该 token 的用户
-- exp：过期时间
 
 使用 base64 编码后变成：
 
@@ -137,7 +118,7 @@ eyJmcm9tX3VzZXIiOiJCIiwidGFyZ2V0X3VzZXIiOiJBIn0
 
 **签名：**
 
-将上面的 头部 和 载荷 进行拼接，中间用 `.` 隔开，变成：
+将上面的 头部 和 载荷 **base64 编码后的字符串** 进行拼接，中间用 `.` 隔开，变成：
 
 ```java
 eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJmcm9tX3VzZXIiOiJCIiwidGFyZ2V0X3VzZXIiOiJBIn0
@@ -177,7 +158,9 @@ eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJmcm9tX3VzZXIiOiJCIiwidGFyZ2V0X3VzZXIiOiJ
 
 
 
-> ### 信息暴露？
+![preview](https://pic3.zhimg.com/v2-f1556c71042566d4a6f69ee20c2870ae_r.jpg)
+
+> ### 信息暴露
 
 我们可以发现，JWT 中的 Header 和 Payload 相当于是明文传输，因此 JWT 不用来存储敏感信息，一般就是存储用户的 id
 
@@ -185,77 +168,84 @@ eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJmcm9tX3VzZXIiOiJCIiwidGFyZ2V0X3VzZXIiOiJ
 
 
 
-> ### JWT 的鉴定流程
-
-![preview](https://pic3.zhimg.com/v2-f1556c71042566d4a6f69ee20c2870ae_r.jpg) 
-
-上面的 SHA256、HMAC、Base64 算法 都不是一个加密算法
-
-Base64 是一个编码算法，是为了让数据更快的传输，编码后的数据是可以直接翻译成原文的
-
-SHA256、HMAC 是散列算法，用来生成 签名 （signature 或者 信息摘要），这个算法就跟 CA 证书上的 散列算法一致，都是用来生成  signature 的
+### 2、JWT 的鉴定流程
 
 
 
+注意，JWT 是用来代替 session 记录用户的登录状态的，服务器不用自己存储减少压力，同时还能防止 CSRF 攻击
 
 
 
+目前项目都是使用的微服务，将一个个功能模块分割出来，一般情况下的鉴定流程：
+
+- 用户第一次请求登录
+- 网关 Zuul（模块 1） 拦截到请求后，将请求转发到 授权中心（模块 2）
+- 授权中心生成 JWT，返回给 Zuul，Zuul 将 JWT 返回给 用户（注意，使用的都是 https）
+- 用户其他请求携带 JWT
+- Zuul 将 JWT 交给 授权中心
+- 授权中心 对 token 的 header 进行 base64 解码，获取签名的加密算法，然后使用该加密算法对 header 和 payload 以及一个密钥 进行加密，然后进行验证，验证通过请求放行
+
+ ![在这里插入图片描述](https://img-blog.csdnimg.cn/20190603112751260.png?) 
+
+ 
 
 
 
+我们可以看出，对于普通的 JWT 验证，所有用户的验证请求导致  Zuul 和 授权中心的频繁交互，系统间的网络请求频率过高，效率差，因为对于 "验证" ，需要越快越好
+
+- 因此我们使用 RSA 作为加密算法，先使用 RAS 算法生成一对 公钥 和 私钥，公钥交给 Zuul 以及 其他的微服务，私钥 授权中心自己保管
+- 用户第一次请求登录
+- Zuul 拦截请求，发现没有 JWT，将请求转发给 授权中心
+- 授权中心 生成 JWT，并且使用 私钥 对 JWT 进行加密，返回给用户
+- 用户其他请求携带 JWT
+- Zuul 拦截请求，使用 公钥对 私钥加密了的 JWT 进行解密，获取 原生的 JWT，然后对 JWT 进行验证，验证通过就放行，这样就无需再访问授权中心
 
 
 
+这里整体讲一下使用 RSA 和 不使用 RSA 的区别：
 
-## 3、CSRF 攻击
+- 没有使用 RSA，那么生成签名的密钥只能由 授权中心 保管，防止泄漏导致其他人伪造 jwt，因此每次都验证都需要转发到 授权中心，效率低；
+- 使用了 RSA，那么公钥可以下发到 Zuul 和 其他微服务，这样的话验证就可以让它们来进行，不需要经过授权中心，授权中心只负责签发，同时由于 私钥 在 授权中心，只要保证授权中心的私钥不泄漏，那么就无法伪造 jwt，因为就算 公钥泄漏了，它们也只能使用公钥加密，这样在 Zuul 中是无法使用公钥解密的，有效防止 伪造 JWT 的问题
+- 但实际上，**如果使用了 RSA，JWT 可以省去 签名 了，因为公钥可以解密，表示没有被篡改，不再需要使用 签名验证**
 
-CSRF 攻击 就是黑客 未经本人许可 以 本人 的名义发送恶意请求（修改密码，银行转账等）
-
-CSRF 攻击原理是 **浏览器分不清发起请求的是否是用户本人，每次请求都会带上 cookie，而 cookie 内部又有用于验证身份的 sessionid**
-
-
-
-**CSRF 攻击模拟：**
-
-- 用户 X 登录了某银行网站 A，这时候银行后台会发送一个 cookie 给 X，浏览器会保存这个 cookie
-- X 被一个危险的网站 B 诱导访问
-- 网站 B 中内部有一个隐藏的 form 表单，是 POST 请求的，当用户 X  点击了某些东西的时候，就会触发这个表单的提交事件，表单提交的内容是向 银行网站 A 要求将 X 的 1000 元转账到 中间人 F 账户中
-- 这时候由于 X 访问 网站 B 的浏览器同时也是之前访问 银行网站 A 的浏览器，因此浏览器会将 cookie 跟着请求一起发送给银行网站 A，网站 A  收到后发现有 cookie 就不再进行登录验证，而是执行转账
-- 这样， X 的 1000 元就没有了
-
-我们可以看出，中间人 F 他并没有获取 X 的 cookie，他并不知道 X 的 cookie 的内容，只是通过 X 点击了某些东西触发了表单提交，使得浏览器发送出请求；这相当于是 存在一个转账请求按钮，不过不是 用户 X 自己点的，而是 中间人 F 帮助 用户 X 点的，因此浏览器无法察觉这是否是来自用户的请求，只是一味的将请求发送出去
-
-
-
-CSRF 防范手段：
-
-- 使用验证码：比如转账这种重要请求，就不能单单只是靠 cookie，而是需要发送验证码让用户自己确认是否执行这个请求，在一定强度的验证码下，中间人机器是无法识别的，比如图片高斯模糊，然后给定很多个文字，让点某个文字
-- 添加 Referer 字段：从上面的 HTTP 请求报文头部我们可以看出来存在这么一个字段，它指向的是发起请求的来源地址，对于本次转账请求，来源地址就是 网站 B；服务端需要做的是就是验证这个网站是否是信任网站，不是的话则拒绝响应
+**因此在微服务场景下，使用 RSA 加密的 JWT，（按理说）可以省去 签名，同时可以降低授权中心的压力，将验证分摊到各个微服务中，同时保证了安全**
 
 
 
 
 
-## 4、XSS 攻击 - 脚本注入攻击
+## 3、token 和 session 的优劣
 
-百度百科：
+token 相比 session 的优点：
 
-```
-“XSS是跨站脚本攻击(Cross Site Scripting)，为不和层叠样式表(Cascading Style Sheets, CSS)的缩写混淆，故将跨站脚本攻击缩写为XSS。恶意攻击者往Web页面里插入恶意Script代码，当用户浏览该页之时，嵌入其中Web里面的Script代码会被执行，从而达到恶意攻击用户的目的。”
-```
+- session 
+  - 需要服务端存储，当有大量用户的时候会占内存
+  - 在分布式的情况下需要考虑 session 共享问题
+  - 依赖于 cookie，容易发生 CSRF 攻击
 
-简单讲就是 js 注入
+- token
+  - 服务端无需存储，节省内存
+  - 无需考虑分布式的问题
+  - 不依赖于 cookie，可以放在 HTTP header 中，预防 CSRF 攻击
+
+session 相比 token 的优点：
+
+- session 
+  - 不需要考虑续签问题，session 默认有效期为 30min，如果在 30min 内用户存在访问，那么 session 会重新刷新为 30min
+- token 
+  - 存在续签问题，JWT 是使用 payload 中的 exp 字段来记录过期时间的，并且 payload 是参与签名生成的，一旦 payload 中的任何一个字段发生改变，生成的签名都会发生改变，因此不能够轻易修改 exp 字段，即 JWT 的特性导致它天然不支持续签
 
 
 
-XSS 攻击的危害：
+token 无法续签的这个特性使得它无法在单点登录这方面替代 session，现在 Spring Security 仍然在使用 session
 
-- 使用  document.cookie 命令获取用户的 cookie，这样就无需用户的密码即可登录用户的账号
-- 劫持流量恶意操作：参考 2011年微博 XSS 攻击，大量的用户受到 XSS 攻击自动发布微博，关注用户等
+一般情况下，服务器无法主动注销 token，如果修改 secret 的话，会使得所有使用该 secret 的 token 全部失效，只能等待 token 主动失效，但这样的话，就存在安全性问题了，如果一个用户修改密码，那么按照正常流程来说，旧的 token 应该是不能用了的，需要重新登录获取新的 token，但是由于服务器不能主动使 token 失效，因此就导致旧的 token 仍然有效。
+
+对此，解决方法有以下：
+
+- 添加 token 黑名单，无效的 token 加入黑名单，这样可以主动注销某个 token，只要请求的 token 位于该黑名单中，那么请求无效
+- 为每个用户分配一个 secret，而不是所有用户共用一个 secret，这样可以针对某个用户修改 secret，使得他的 token 无效
 
 
 
-XSS 防范手段：
-
-- 过滤 <script> 等标签
-- 对 <> 等符号进行编码转换
+但实际上 **token 更加适合 短期的、一次性验证 的场景**： 比如用户注册后需要发一封邮件让其激活账户，通常邮件中需要有一个链接，这个链接需要具备以下的特性：能够标识用户，该链接具有时效性（通常只允许几小时之内激活），不能被篡改以激活其他可能的账户…这种场景就和 jwt 的特性非常贴近，jwt 的 payload 中固定的参数：iss 签发者和 exp 过期时间正是为其做准备的。 

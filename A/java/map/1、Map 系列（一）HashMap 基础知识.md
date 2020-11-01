@@ -2,25 +2,25 @@
 
 
 
-## 1、hashmap 和 hashtable 的区别
+## 1、HashMap 和 HashTable 的区别
 
 
 
-HM 是线程不安全的，所有方法都没有锁机制
+HashMap 线程不安全
 
-HT 是线程安全的，所有方法都加了 synchronized 锁  
-
-
-
-HM 的 key 只存在一个位置为空值，value 允许空值，并且 key 为 null 时，get() 得到的结果也为 null，因为它无法分辨之前是否存储过 key = null 的情况，因此统一返回 null，所以 put(null, xx) 也没什么意义
-
-HT 的 key 和 value 都不允许空值
+HashTable 线程安全，方法加 synchronized 锁  
 
 
 
-HM 的默认容量是 16，后续扩容直接 * 2，即 cap << 1，这样就能保证是 2 的指数
+HashMap 的 key 只存在一个位置为空值，value 允许空值，并且 key 为 null 时，get() 得到的结果也为 null，因为它无法分辨之前是否存储过 key = null 的情况，因此统一返回 null，所以 put(null, xx) 也没什么意义
 
-HT 的默认容量是 11，后续扩容是 2 * old + 1
+HashTable 的 key 和 value 都不允许空值
+
+
+
+HashMap 的默认容量是 16，后续扩容直接 * 2，即 cap << 1，这样就能保证是 2 的指数
+
+HashTable 的默认容量是 11，后续扩容是 2 * old + 1
 
 ```java
 int newCapacity = (oldCapacity << 1) + 1;
@@ -28,38 +28,36 @@ int newCapacity = (oldCapacity << 1) + 1;
 
 
 
-HM 的迭代方式是 iterator
+HashMap 的迭代方式是 Iterator
 
-HT 的迭代方式是 Enumeration + Iterator
+HashTable 的迭代方式是 Enumeration + Iterator
 
 - 前一种支持修改，但不属于 fail-safe，因为它没有任何的检验和操作
 - 后一种不支持修改，是 fail-fast
 
-HT 在遍历的时候跟 HM 一样，不是线程安全的，只有在 put()、get() 的时候才是线程安全的
+
+
+HashMap 插入时对象需要重新计算 hash 值
+
+HashTable 直接将对象的 hashCode 作为 hash 值，直接获取 key.hashCode()
 
 
 
-HM 插入时对象需要重新计算 hash 值
+> ### 为什么 HashTable 不能存储空值？
 
-HT 直接将对象的 hashCode 作为 hash 值，直接获取 key.hashCode()
-
-
-
-> ### 为什么 hashtable 不能存储空值？
-
-因为 hashTable 是具有线程安全性质的，它是在多线程条件下使用的
+因为 HashTable 是具有线程安全性质的，它是在多线程条件下使用的
 
 我们可以发现，当我们使用 get() 获取 key 对应的 value 的时候，如果 value 不存在，那么会返回 null
 
-但是如果是在多线程环境下，如果可以存储 null 值，当 hashtable 使用 get() 获取 key 对应的 value，如果 value = null
+但是如果是在多线程环境下，如果可以存储 null 值，当 HashTable 使用 get() 获取 key 对应的 value，如果 value = null
 
 这时候它不知道是因为元素中不存在 key 的原因 还是 因为 key 对应的 value 就是 null 的原因，才返回的 null，所以这时候它会调用 contains() 方法，查找 key 是否存在，如果存在，那么表示的 key 对应的 value 为 null
 
-由于 hashtable 中 get() put() contains() 方法都是上锁的，所以没有问题，问题的关键在于，这是多线程环境下的，当 contains() 完成知道了 null 的原因后，当准备下一步利用这个值做某些事情的时候，别的线程可能就改变这个值，使它不为 null 了，**为 null 和 不为 null 对于后续我们的逻辑判断的影响是很大的**
+由于 HashTable 中 get() put() contains() 方法都是上锁的，所以没有问题，问题的关键在于，这是多线程环境下的，当 contains() 完成知道了 null 的原因后，当准备下一步利用这个值做某些事情的时候，别的线程可能就改变这个值，使它不为 null 了，**为 null 和 不为 null 对于后续我们的逻辑判断的影响是很大的**
 
-所以 hashtable 和 concurrentHashMap 都不允许存储 null 值
+所以 HashTable 和 concurrentHashMap 都不允许存储 null 值
 
-而 hashMap 是单线程的，所以不会出现此种情况，因此可以存储 null 值
+而 HashMap 是单线程的，所以不会出现此种情况，因此可以存储 null 值
 
 
 
@@ -152,7 +150,7 @@ n |= n >>> 8； 对 n 右移 8 位，然后进行或操作，那么 n 变成  01
 
 概率问题
 
-根据泊松分布，链表节点数量为 8 概率极低，除非使用的 hash 算法散列效果差得一批，就跟 hashtable 的 hash 计算一样，直接使用 hashCode 计算，高位没有用到，这样的话节点插入同个槽中，就需要转红黑树了
+根据泊松分布，链表节点数量为 8 概率极低，除非使用的 hash 算法散列效果差得一批，就跟 HashTable 的 hash 计算一样，直接使用 hashCode 计算，高位没有用到，这样的话节点插入同个槽中，就需要转红黑树了
 
 作者认为 链表长度为 8 过长了，查询效率低，如果每次查询的数据都在尾部，那么每次都需要查找 O(n)，所以利用空间换时间，转换为红黑树
 

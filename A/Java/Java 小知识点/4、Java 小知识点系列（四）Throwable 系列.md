@@ -36,13 +36,13 @@ Error 讲究的是 JVM 层面的错误，比如 NotClassDefFoundClass、OOM
 
 ## 3、throw 和 throws
 
-throw 是运行在 函数内部的，表示抛出一个异常，想什么时候抛就什么时候抛，可以位于方法的任意一个位置
+throw 是在方法内部的，表示抛出一个异常，可以位于方法的任意一个位置
 
-throws 是位于方法声明上的，表示这个方法随时可能会出现异常，并且没有进行处理，需要调用该方法的方法进行处理
+throws 是位于方法声明上的，对于一些非运行时异常，如果没有进行 try-catch，那么就必须进行 throws
 
-当调用 throw 抛出一个异常的时候，必须在方法上使用 throws 声明该异常类
 
-throw 后面跟的是异常的实例，throws 后面跟的是异常的类型
+
+throw 后面跟的是异常的实例对象，throws 后面跟的是异常的类型
 
 ```java
 public class A{
@@ -58,35 +58,22 @@ public class A{
 }
 ```
 
-
-
 我们可以根据对某一特定的情况进行 throw
 
 ```java
-String str = "abc"
-if("abc".equals(str)){
-    throw new NumberFormatException();
-}else{
-    System.out.println(str);
-}
-```
-
-
-
-而一般情况下是 try-catch + throw 进行错误集中处理，因为我们有时候并不能列举出所有的异常情况，有的情况我们意想不到，因此需要使用 try-catch，而我们又不想自己去处理异常，因此，直接在里面 throw 出异常给上层处理，同时可以进行一些 log 记录
-
-当然，可能会说为什么不直接 throws，因为 catch 后可以进行一些日志处理之类的特殊处理
-
-```java
-public void h() throws Exception{
-    try{
-    //
-    }catch(Exception e){
-    	logger.info("出现异常了");
-        thorw new Exception();
+public void h throw ArrayIndexOutOfBoundsException(int[] arr, int i){
+    if(i < 0){
+        throw new ArrayIndexOutOfBoundsException("索引越界");
     }
+    //do something
 }
 ```
+
+
+
+使用 throw 可以我们自己受控的在指定位置指定情况下抛出某个指定的异常，并且指定异常的错误信息
+
+需要注意的是，**throw 后同时还需要在 方法上添加 throws，即使用了 throw 同时也必须使用 throws**
 
 
 

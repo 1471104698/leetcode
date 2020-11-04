@@ -294,3 +294,20 @@ grep 类似正则表达式，是需要进行匹配的
 
 使用 `netstat -tunlp`直接查看 socket 连接，即可获取被占用的端口号
 
+
+
+
+
+## 6、查看某个文件某个关键字出现的次数
+
+```shell
+grep -o '关键字' fileName | wc -l
+```
+
+例子：
+
+```shell
+[root@localhost ~]# grep -o '欧阳' a.txt | wc -l
+6
+```
+

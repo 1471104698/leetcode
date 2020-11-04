@@ -115,6 +115,14 @@ wait(1000) 跟 wait() 的差别在于 **wait(1000) 不需要 notify() 来唤醒*
 
 
 
+Runnable 和 Callable 的区别：
+
+1. Runnable 的方法体为 run()，没有返回值，Callable 的方法体为 call()，有返回值
+2. Callable 由于需要阻塞等待返回值，所以需要跟 FutureTask 配合使用，封装为一个 FutureTask
+3. Callable 的 call() 方法不是线程的最高层，所以它可以抛出异常，让 Futiure 的 get() 处理异常，而 Runnable 的 run() 是贤臣的最高层，所以它不能往上抛出异常，需要在 run() 内处理异常
+
+
+
 ## 5、线程、进程、线程池的状态变化
 
 > ### 1、进程的状态

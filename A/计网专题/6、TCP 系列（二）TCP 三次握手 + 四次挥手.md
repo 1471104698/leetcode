@@ -12,7 +12,7 @@
 
 - 客户端 初始化一个 seq_1，发送 SYN 包给服务端，处于 SYN_SENT 状态（SYN 发送）
 - 服务端接收到后，初始化一个 seq_2，以及一个 ACK = seq_1 + 1，发送 SYN + ACK 包给客户端，处于 SYN_RCVD 状态（SYN 接收）
-- 客户端受到后，seq_1 = seq_1 + 1，ACK = seq_2 + 1，然后发送一个 ACK 包给服务端，此时处于 ESTABLISHED 状态（已连接）
+- 客户端收到后，seq_1 = seq_1 + 1，ACK = seq_2 + 1，然后发送一个 ACK 包给服务端，此时处于 ESTABLISHED 状态（已连接）
 - 服务端受到 ACK 后，处于 处于 ESTABLISHED 状态（已连接）
 
 

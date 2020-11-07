@@ -43,7 +43,141 @@ View：其本身是一个接口，实现类支持不同的View类型（JSP、Fre
 
 
 
-## 3、HandlerMapping 组件
+
+
+## 3、DispatcherServlet 处理流程
+
+从最上面的流程图可以看出，用户的请求最先进入到 DispatcherServlet 类，这个类也是Spring MVC 最为核心的类
+
+```java
+public class DispatcherServlet extends FrameworkServlet {
+}
+
+public abstract class FrameworkServlet extends HttpServletBean implements ApplicationContextAware {
+}
+
+public abstract class HttpServletBean extends HttpServlet implements EnvironmentAware {
+}
+
+public abstract class HttpServlet extends GenericServlet {
+}
+
+public abstract class GenericServlet implements Servlet, java.io.Serializable{
+}
+```
+
+可以看出 DispatcherServlet 实际上是 HttpServlet 的一个子类，而 HttpServlet 又是 Servlet 的一个子类
+
+即 涉及到的 类都是 Servlet 类，而在 Servlet 接口中，存在一个最为重要的方法：service()
+
+Servlet 拦截用户的请求后就是进入到 service() 中进行处理，所以 DispatcherServlet 处理用户请求的入口逻辑就是这个 service()
+
+
+
+DispatcherServlet 类内部没有 service() 方法，该方法继承了 父类 FrameworkServlet 的逻辑
+
+FrameworkServlet 的 service() 的 逻辑如下：
+
+```java
+@Override
+protected void service(HttpServletRequest request, HttpServletResponse response)
+    throws ServletException, IOException {
+
+    HttpMethod httpMethod = HttpMethod.resolve(request.getMethod());
+    if (httpMethod == HttpMethod.PATCH || httpMethod == null) {
+        //调用 doService()
+        doService(request, response);
+    }
+    else {
+        super.service(request, response);
+    }
+}
+//FrameworkServlet 的 doService()，一个抽象方法
+protected abstract void doService(HttpServletRequest request, HttpServletResponse response)
+			throws Exception;
+```
+
+在 service() 中调用了 doService()，但是在 FrameworkServlet 中，该方法为一个抽象方法，需要由子类实现，所以该方法的具体实现是在 DispatcherServlet 中
+
+DispatcherServlet 中 doService() 主要逻辑如下：
+
+```java
+@Override
+protected void doService(HttpServletRequest request, HttpServletResponse response) throws Exception {
+    Map<String, Object> attributesSnapshot = null;
+    if (WebUtils.isIncludeRequest(request)) {
+        attributesSnapshot = new HashMap<>();
+        Enumeration<?> attrNames = request.getAttributeNames();
+        while (attrNames.hasMoreElements()) {
+            String attrName = (String) attrNames.nextElement();
+            if (this.cleanupAfterInclude || attrName.startsWith(DEFAULT_STRATEGIES_PREFIX)) {
+                attributesSnapshot.put(attrName, request.getAttribute(attrName));
+            }
+        }
+    }
+
+    // Make framework objects available to handlers and view objects.
+    request.setAttribute(WEB_APPLICATION_CONTEXT_ATTRIBUTE, getWebApplicationContext());
+    request.setAttribute(LOCALE_RESOLVER_ATTRIBUTE, this.localeResolver);
+    request.setAttribute(THEME_RESOLVER_ATTRIBUTE, this.themeResolver);
+    request.setAttribute(THEME_SOURCE_ATTRIBUTE, getThemeSource());
+
+    try {
+        //调用 doDispatch()
+        doDispatch(request, response);
+    }
+    finally {
+
+    }
+}
+```
+
+在 doService() 中在给 request 设置了一些参数后，调用了 doDispatch()，该方法是 Spring MVC 的核心处理逻辑，进入该方法才是真正进入了 Spring MVC 
+
+DispatcherServlet 中 doDispatch() 主要逻辑如下：
+
+```java
+protected void doDispatch(HttpServletRequest request, HttpServletResponse response) throws Exception {
+    HttpServletRequest processedRequest = request;
+    HandlerExecutionChain mappedHandler = null;
+    boolean multipartRequestParsed = false;
+    WebAsyncManager asyncManager = WebAsyncUtils.getAsyncManager(request);
+
+    try {
+        try {
+            //创建一个视图对象 ModelAndView
+            ModelAndView mv = null;
+            Object dispatchException = null;
+            try {
+                processedRequest = this.checkMultipart(request);
+                multipartRequestParsed = processedRequest != request;
+                //获取处理请求的 视图对象 handler，里面封装了我们的 Controller 对象
+                mappedHandler = this.getHandler(processedRequest);
+                if (mappedHandler == null) {
+                    this.noHandlerFound(processedRequest, response);
+                    return;
+                }
+                //获取 handler 对应的适配器
+                HandlerAdapter ha = this.getHandlerAdapter(mappedHandler.getHandler());
+                
+                //适配器 ha 执行 handler，并返回一个 视图 ModelAndView（如果是返回的 JSON 数据，那么这里不会返回 ModelAndView 对象，直接在 返回值处理器中将数据写回页面了）
+                mv = ha.handle(processedRequest, response, mappedHandler.getHandler());
+                if (asyncManager.isConcurrentHandlingStarted()) {
+                    return;
+                }
+                this.applyDefaultViewName(processedRequest, mv);
+                mappedHandler.applyPostHandle(processedRequest, response, mv);
+            }
+			//对 ModelAndView 对象解析，获取 View
+            this.processDispatchResult(processedRequest, response, mappedHandler, mv, (Exception)dispatchException);
+        } 
+    } 
+}
+```
+
+
+
+## 4、HandlerMapping 组件
 
 当 DispatcherServlet 获取到用户请求后，会委托 HandlerMapping 解析 request 需要调用的 handler
 
@@ -318,7 +452,7 @@ public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMap
 
 `end`
 
-## 4、HandlerAdapter 组件
+## 5、HandlerAdapter 组件
 
 当 HandlerMapping 解析出 Handler 后，DispatcherServlet 会委托 HandlerAdapter 使用 Handler 处理 用户请求，返回视图
 
@@ -450,134 +584,250 @@ public class RequestMappingHandlerAdapter extends AbstractHandlerMethodAdapter
 
 
 
-## 5、DispatcherServlet 处理流程
 
-从最上面的流程图可以看出，用户的请求最先进入到 DispatcherServlet 类，这个类也是Spring MVC 最为核心的类
+
+## 6、获取 ModelAndView
+
+通过调用 HandlerAdapter（RequestMappingHandlerAdapter） 的 handle() 对 HandlerMapping 返回的 handler 进行处理，获取 ModelAndView 对象
+
+handle() 有两种处理情况：
+
+1. 在方法上添加 @ResponseBody 或者 类上添加 @RestController，这种是属于直接返回 JSON，那么它就不会生成 ModelAndView，而是直接将数据写回到页面上
+2. 返回一个 html、jsp 页面 或者 Excel 表格，这种就需要生成 ModelAndView，然后解析成 View 再返回
+
+
+
+> ### 1、处理 JSON
+
+假设我们请求 user/1，最终返回的应该是 `不得了`JSON 字符串
 
 ```java
-public class DispatcherServlet extends FrameworkServlet {
-}
-
-public abstract class FrameworkServlet extends HttpServletBean implements ApplicationContextAware {
-}
-
-public abstract class HttpServletBean extends HttpServlet implements EnvironmentAware {
-}
-
-public abstract class HttpServlet extends GenericServlet {
-}
-
-public abstract class GenericServlet implements Servlet, java.io.Serializable{
+@Controller
+@RequestMapping("/user")
+public class UserController {
+    @ResponseBody
+    @RequestMapping(value = "/{id}", method = RequestMethod.GET)
+    public String getUser(HttpServletRequest request, @PathVariable Integer id) {
+        return "不得了";
+    }
 }
 ```
 
-可以看出 DispatcherServlet 实际上是 HttpServlet 的一个子类，而 HttpServlet 又是 Servlet 的一个子类
-
-即 涉及到的 类都是 Servlet 类，而在 Servlet 接口中，存在一个最为重要的方法：service()
-
-Servlet 拦截用户的请求后就是进入到 service() 中进行处理，所以 DispatcherServlet 处理用户请求的入口逻辑就是这个 service()
 
 
-
-DispatcherServlet 类内部没有 service() 方法，该方法继承了 父类 FrameworkServlet 的逻辑
-
-FrameworkServlet 的 service() 的 逻辑如下：
+首先，经过 DispatcherServlet  doDispatch() 在 RequestMappingHandlerMapping 中获取 handler，然后遍历所有的适配器，选定合适的适配器 RequestMappingHandlerAdapter ，再调用 RequestMappingHandlerAdapter 的 handle() 处理 handler 对象（HandlerMethod 类型）
 
 ```java
-@Override
-protected void service(HttpServletRequest request, HttpServletResponse response)
-    throws ServletException, IOException {
-
-    HttpMethod httpMethod = HttpMethod.resolve(request.getMethod());
-    if (httpMethod == HttpMethod.PATCH || httpMethod == null) {
-        //调用 doService()
-        doService(request, response);
-    }
-    else {
-        super.service(request, response);
-    }
-}
-//FrameworkServlet 的 doService()，一个抽象方法
-protected abstract void doService(HttpServletRequest request, HttpServletResponse response)
-			throws Exception;
+mv = ha.handle(processedRequest, response, mappedHandler.getHandler());
 ```
 
-在 service() 中调用了 doService()，但是在 FrameworkServlet 中，该方法为一个抽象方法，需要由子类实现，所以该方法的具体实现是在 DispatcherServlet 中
 
-DispatcherServlet 中 doService() 主要逻辑如下：
+
+经过中间方法调用，进入到 RequestMappingHandlerAdapter 的 invokeHandlerMethod()
 
 ```java
-@Override
-protected void doService(HttpServletRequest request, HttpServletResponse response) throws Exception {
-    Map<String, Object> attributesSnapshot = null;
-    if (WebUtils.isIncludeRequest(request)) {
-        attributesSnapshot = new HashMap<>();
-        Enumeration<?> attrNames = request.getAttributeNames();
-        while (attrNames.hasMoreElements()) {
-            String attrName = (String) attrNames.nextElement();
-            if (this.cleanupAfterInclude || attrName.startsWith(DEFAULT_STRATEGIES_PREFIX)) {
-                attributesSnapshot.put(attrName, request.getAttribute(attrName));
-            }
-        }
-    }
-
-    // Make framework objects available to handlers and view objects.
-    request.setAttribute(WEB_APPLICATION_CONTEXT_ATTRIBUTE, getWebApplicationContext());
-    request.setAttribute(LOCALE_RESOLVER_ATTRIBUTE, this.localeResolver);
-    request.setAttribute(THEME_RESOLVER_ATTRIBUTE, this.themeResolver);
-    request.setAttribute(THEME_SOURCE_ATTRIBUTE, getThemeSource());
+@Nullable
+protected ModelAndView invokeHandlerMethod(HttpServletRequest request,
+                                           HttpServletResponse response, HandlerMethod handlerMethod) throws Exception {
 
     try {
-        //调用 doDispatch()
-        doDispatch(request, response);
+		/*
+		这里将 handler 封装为 ServletInvocableHandlerMethod，将 handler 作为它内部的一个变量进行维护
+		ServletInvocableHandlerMethod 也是一个 HandlerMethod 对象
+		*/
+        ServletInvocableHandlerMethod invocableMethod = createInvocableHandlerMethod(handlerMethod);
+      	
+        //ModelAndView 容器
+        ModelAndViewContainer mavContainer = new ModelAndViewContainer();
+		mavContainer.addAllAttributes(RequestContextUtils.getInputFlashMap(request));
+        modelFactory.initModel(webRequest, mavContainer, invocableMethod);
+        mavContainer.setIgnoreDefaultModelOnRedirect(this.ignoreDefaultModelOnRedirect);
+        
+        //调用 ServletInvocableHandlerMethod 的 invokeAndHandle()
+        invocableMethod.invokeAndHandle(webRequest, mavContainer);
+        return getModelAndView(mavContainer, modelFactory, webRequest);
     }
     finally {
-
+        webRequest.requestCompleted();
     }
 }
 ```
 
-在 doService() 中在给 request 设置了一些参数后，调用了 doDispatch()，该方法是 Spring MVC 的核心处理逻辑，进入该方法才是真正进入了 Spring MVC 
 
-DispatcherServlet 中 doDispatch() 主要逻辑如下：
+
+ServletInvocableHandlerMethod 的 invokeAndHandle() 逻辑如下：
 
 ```java
-protected void doDispatch(HttpServletRequest request, HttpServletResponse response) throws Exception {
-    HttpServletRequest processedRequest = request;
-    HandlerExecutionChain mappedHandler = null;
-    boolean multipartRequestParsed = false;
-    WebAsyncManager asyncManager = WebAsyncUtils.getAsyncManager(request);
+public void invokeAndHandle(ServletWebRequest webRequest, ModelAndViewContainer mavContainer,
+                            Object... providedArgs) throws Exception {
+	
+    //这里执行 handler 对象的方法，获取到该方法的返回值 returnValue
+    Object returnValue = invokeForRequest(webRequest, mavContainer, providedArgs);
+    setResponseStatus(webRequest);
 
+    mavContainer.setRequestHandled(false);
     try {
-        try {
-            //创建一个视图对象 ModelAndView
-            ModelAndView mv = null;
-            Object dispatchException = null;
-            try {
-                processedRequest = this.checkMultipart(request);
-                multipartRequestParsed = processedRequest != request;
-                //获取处理请求的 视图对象 handler，里面封装了我们的 Controller 对象
-                mappedHandler = this.getHandler(processedRequest);
-                if (mappedHandler == null) {
-                    this.noHandlerFound(processedRequest, response);
-                    return;
-                }
-                //获取 handler 对应的适配器
-                HandlerAdapter ha = this.getHandlerAdapter(mappedHandler.getHandler());
-                
-                //适配器 ha 执行 handler，并返回一个 视图 ModelAndView
-                mv = ha.handle(processedRequest, response, mappedHandler.getHandler());
-                if (asyncManager.isConcurrentHandlingStarted()) {
-                    return;
-                }
-                //处理视图
-                this.applyDefaultViewName(processedRequest, mv);
-                mappedHandler.applyPostHandle(processedRequest, response, mv);
-            }
-
-            this.processDispatchResult(processedRequest, response, mappedHandler, mv, (Exception)dispatchException);
-        } 
-    } 
+        /*
+        	getReturnValueType(returnValue) 是将返回值封装成一个 MethodParameter 对象，同时该对象内部还含有 handler对象 的注解信息，比如 @RequestMapping、@ResponseBody
+        	调用 handleReturnValue() 处理返回值
+        */
+        this.returnValueHandlers.handleReturnValue(
+            returnValue, getReturnValueType(returnValue), mavContainer, webRequest);
+    }
+    catch (Exception ex) {
+        throw ex;
+    }
 }
 ```
 
+
+
+返回值处理方法：handleReturnValue() 方法逻辑如下：
+
+```java
+@Override
+public void handleReturnValue(@Nullable Object returnValue, MethodParameter returnType,
+                              ModelAndViewContainer mavContainer, NativeWebRequest webRequest) throws Exception {
+	//调用 selectHandler() 根据 returnType 选择一个返回值处理器
+    HandlerMethodReturnValueHandler handler = selectHandler(returnValue, returnType);
+    if (handler == null) {
+        throw new IllegalArgumentException("Unknown return value type: " + returnType.getParameterType().getName());
+    }
+    //使用上面选定的返回值处理器对返回值进行处理
+    handler.handleReturnValue(returnValue, returnType, mavContainer, webRequest);
+}
+```
+
+
+
+返回值处理器选择方法：selectHandler() 方法逻辑如下：
+
+```java
+@Nullable
+private HandlerMethodReturnValueHandler selectHandler(@Nullable Object value, MethodParameter returnType) {
+    boolean isAsyncValue = isAsyncReturnValue(value, returnType);
+    for (HandlerMethodReturnValueHandler handler : this.returnValueHandlers) {
+        //遍历所有的返回值处理器，调用 supportsReturnType() 根据 returnType 判断是否支持处理该返回值
+        if (handler.supportsReturnType(returnType)) {
+            return handler;
+        }
+    }
+    return null;
+}
+```
+
+
+
+最终是一个叫 RequestResponseBodyMethodProcessor 的返回值处理器来处理 JSON 类型的返回值
+
+可以看到它的 supportsReturnType() 就是判断该 handler 的 Controller 类上是否有 @ResponseBody 或者 该 handler 上是否存在 @ResponseBody 
+
+```java
+@Override
+public boolean supportsReturnType(MethodParameter returnType) {
+    //判断该 handler 的 Controller 类上是否有 @ResponseBody 或者 该 handler 上是否存在 @ResponseBody 
+    return (AnnotatedElementUtils.hasAnnotation(returnType.getContainingClass(), ResponseBody.class) ||
+            returnType.hasMethodAnnotation(ResponseBody.class));
+}
+```
+
+
+
+当选定后，就是调用 返回值处理器 的 handleReturnValue() 对返回值进行处理，该处理器的方法逻辑 是**直接将 JSON 数据写回到页面上**，后续就生成的 ModelAndView 对象就为 null，不会再进行额外处理
+
+
+
+> ### 2、HTML 页面
+
+假设我们请求 user/1，最终返回的应该是 `不得了.html`页面
+
+```java
+@Controller
+@RequestMapping("/user")
+public class UserController {
+    @RequestMapping(value = "/{id}", method = RequestMethod.GET)
+    public String getUser(HttpServletRequest request, @PathVariable Integer id) {
+        return "不得了";
+    }
+}
+```
+
+
+
+前面的跟 JSON 的流程一样， 区别在 选择 返回值处理器，由于最终需要返回的是 HTML 页面，所以不会在 Controller 上添加 @ResponseBody 或者 在方法上添加 @ResponseBody，那么就不会选择 RequestResponseBodyMethodProcessor 作为返回值处理器，这里选定的是 ViewNameMethodReturnValueHandler 作为返回值处理器
+
+以下是 ViewNameMethodReturnValueHandler 的 supportsReturnType()：
+
+```java
+@Override
+public boolean supportsReturnType(MethodParameter returnType) {
+    //获取返回值的类型
+    Class<?> paramType = returnType.getParameterType();
+    /*
+    判断返回值是否为空，或者是否是 String 类型（String 实现了 CharSequence 接口），
+    因为如果要解析为 html 页面的话，那么返回的就应该是 字符串，这样才能够跟 suffix 进行拼接查找请求的 html 页面
+    */
+    return (void.class == paramType || CharSequence.class.isAssignableFrom(paramType));
+}
+```
+
+
+
+选定好返回值处理器后，调用它的 handleReturnValue() 处理器返回值：
+
+```java
+@Override
+public void handleReturnValue(@Nullable Object returnValue, MethodParameter returnType,
+                              ModelAndViewContainer mavContainer, NativeWebRequest webRequest) throws Exception {
+	
+    /*
+    判断 返回值 是否是 String 类型
+    如果不是 String 类型，但又不为空，那么当前 返回值处理器无法处理，抛出异常
+    如果是的话，那么将 返回值 "不得了" 设置到 ModelAndViewContainer 视图容器 中
+    
+    注意：这里还会调用一个 isRedirectViewName()，该方法是判断返回值是否及逆行重定向
+    */
+    if (returnValue instanceof CharSequence) {
+        String viewName = returnValue.toString();
+        mavContainer.setViewName(viewName);
+        //如果需要重定向
+        if (isRedirectViewName(viewName)) {
+            //将 ModelAndViewContainer 中重定向标识设置为 true
+            mavContainer.setRedirectModelScenario(true);
+        }
+    }
+    else if (returnValue != null) {
+        // should not happen
+        throw new UnsupportedOperationException("Unexpected return type: " +
+                                                returnType.getParameterType().getName() + " in method: " + returnType.getMethod());
+    }
+}
+```
+
+
+
+isRedirectViewName() 方法逻辑如下：
+
+```java
+protected boolean isRedirectViewName(String viewName) {
+    /*
+    正则匹配如果以 指定的 redirectPatterns 字符串开头，
+    或者以 "redirect:" 字符串开头，那么表示需要进行重定向
+    
+    redirectPatterns 字符串默认为 空
+    */
+    return simpleMatch(this.redirectPatterns, viewName) || viewName.startsWith("redirect:");
+}
+```
+
+
+
+当 返回值处理器的 handleReturnValue() 处理完成后，将属性都封装在了 ModelAndViewContainer 中，后面调用 getModelAndView() ，从 ModelAndViewContainer 中抽取出信息，封装成一个 ModelAndView 对象，然后一路**从 适配器 处 返回**给 doDispatch() 处的调用
+
+后面使用 ModelAndView 对象中的 返回值 "不得了" 拼接 suffix 后缀形成 `不得了.html`，然后到静态页面目录找到对应的 html 文件返回即可
+
+需要注意的是：在拼接前，会判断是否存在 "forward:" 或者 "redirect:" 前缀，如果有，那么特殊处理
+
+最终返回的 View 的类型为 InternalResourceView
+
+*![image.png](https://pic.leetcode-cn.com/1604556940-kzgisp-image.png)*

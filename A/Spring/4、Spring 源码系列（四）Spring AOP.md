@@ -138,49 +138,6 @@ class AspectJAutoProxyRegistrar implements ImportBeanDefinitionRegistrar {
 
 
 
-注入 `AnnotationAwareAspectJAutoProxyCreator` 后置处理器的逻辑如下：
-
-```java
-//方法名是：注册一个切面注解自动代理创建器，如果需要的话
-@Nullable
-public static BeanDefinition registerAspectJAnnotationAutoProxyCreatorIfNecessary(
-    BeanDefinitionRegistry registry, @Nullable Object source) {
-    //注入 AnnotationAwareAspectJAutoProxyCreator 后置处理器 用来实现 AOP 对象的创建
-    return registerOrEscalateApcAsRequired(AnnotationAwareAspectJAutoProxyCreator.class, registry, source);
-}
-
-@Nullable
-private static BeanDefinition registerOrEscalateApcAsRequired(
-    Class<?> cls, BeanDefinitionRegistry registry, @Nullable Object source) {
-
-    //如果用户自己定义了一个 创建 AOP 的后置处理器，一般是不太可能的
-    if (registry.containsBeanDefinition(AUTO_PROXY_CREATOR_BEAN_NAME)) {
-        BeanDefinition apcDefinition = registry.getBeanDefinition(AUTO_PROXY_CREATOR_BEAN_NAME);
-        if (!cls.getName().equals(apcDefinition.getBeanClassName())) {
-            int currentPriority = findPriorityForClass(apcDefinition.getBeanClassName());
-            int requiredPriority = findPriorityForClass(cls);
-            if (currentPriority < requiredPriority) {
-                apcDefinition.setBeanClassName(cls.getName());
-            }
-        }
-        return null;
-    }
-
-    //用户没有指定，那么使用默认的自动代理创建器
-    RootBeanDefinition beanDefinition = new RootBeanDefinition(cls);
-    beanDefinition.setSource(source);
-    //设置优先级：最高优先级执行
-    beanDefinition.getPropertyValues().add("order", Ordered.HIGHEST_PRECEDENCE);
-    //设置角色：Spring 自己使用
-    beanDefinition.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
-    //注册 该后置处理器的 BeanDefinition，这样就实现了对这个后置处理器的注册，在后续会创建它的 bean，用于创建 AOP
-    registry.registerBeanDefinition(AUTO_PROXY_CREATOR_BEAN_NAME, beanDefinition);
-    return beanDefinition;
-}
-```
-
-
-
 
 
 ## 3、Spring AOP 的大致执行流程
@@ -195,7 +152,8 @@ private static BeanDefinition registerOrEscalateApcAsRequired(
   - 如果出现循环依赖，那么调用第四次后置处理器，提前创建 AOP 对象，这里需要使用了一个 集合 earlyProxyReference 来记录在这里创建的 AOP 对象，这样就可以避免在 第八次后置处理器重复创建 AOP 对象 
   - 如果没有循环依赖，那么前面进行属性注入完后，进行初始化，然后调用第八次后置处理器，它会先判断在 earlyProxyReference  中是否已经存在了这个类，如果存在了那么直接返回 原始 bean
 - 在第四、八次后置处理器中，都会调用一个 wrapIfNecessary()，该方法是 AOP 的入口
-- 在内部会先判断 advisedBeans 是否存在这个 bean，即是否在第一次后置处理器中过滤掉了，或者 已经创建过 AOP 对象了，那么会直接返回，不会再执行 AOP 逻辑
+- 第八次后置处理器在调用 wrapIfNecessary() 前，会判断早期对象集合 earlyProxyReference 中是否存在该 bean，如果存在，那么意味着在 第四次后置处理器中已经产生 AOP 对象了，那么这里就不再重复产生，直接返回。
+- wrapIfNecessary() 会先判断 advisedBeans 是否存在这个 bean，如果在第一次后置处理器中过滤掉了，那么会直接返回，不会再执行 AOP 逻辑
 - 然后获取一个 Advisor 数组，即 @Before、@After的切入点，每个切入点都是一个 Advisor 
 - 调用 createProxy()，会先创建一个 ProxyFactpry 对象，它是 ProxyCreatorSupport 的一个子类
 - 然后将 Advisor 数组 设置到这个 ProxyFactpry 中，调用 ProxyFactpry 的 getProxy()，实际上是调用的父类 ProxyCreatorSupport  的 getProxy()

@@ -123,78 +123,7 @@ Runnable 和 Callable 的区别：
 
 
 
-## 5、线程、进程、线程池的状态变化
-
-> ### 1、进程的状态
-
-**进程至少存在 3 个状态：【运行、就绪、阻塞、退出】**
-
-状态变化如下：
-
-运行状态 -> 就绪状态、阻塞状态
-
-就绪状态 -> 运行状态
-
-阻塞状态 -> 就绪状态
-
-**退出状态：成为僵尸进程**
-
-![img](https://mmbiz.qpic.cn/mmbiz_png/J0g14CUwaZcvw4t9kicec370n3cvX2JS9EfRviciaGMLREQ1nqvjWkibKlREGPI9JyfhA5XlmzFRRiaIATAEiaLbCx4w/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
-
-**阻塞事件**：比如 java 中的 scanner，即等待输入，等待的过程中，即使给进程 CPU 的控制权也没什么意义，因为它被 I/O 事件阻塞了，无法继续执行
-
-
-
-
-
-> ### 2、java线程的状态
-
-在 Thread.State 中定义了 6 种状态
-
-```java
-public enum State {
-    NEW,
-    RUNNABLE,
-    BLOCKED,
-    WAITING,
-    TIMED_WAITING,
-    TERMINATED;
-}
-```
-
-
-
-初始化（NEW）：线程刚创建
-
-
-
-运行（Runnable）：java 线程将 就绪（ready）和 运行中（running）合并为一种状态 Runnable，当调用 start() 时，该线程位于 就绪状态（ready）等待 CPU 调度； 当就绪状态中的线程获取到 CPU 时间片后，会变成 运行中状态（running）
-
-
-
-等待状态（Waiting）：这种状态的线程 CPU 不会调度，需要显示唤醒，比如 notify()，进入该状态的方法为 wait()、Thread.join()
-
-
-
-超时（timed_waiting）：这种状态的线程 CPU 不会调度，在到达一定时间后会自动唤醒进入该状态的方法为 wait(1000)、Thread.sleep(1000)、Thread.join(1000)
-
-
-
-阻塞（Blocking）：线程因为某种原因停止 CPU 调度，暂时停止运行，直到事件解决后才会重新进入 运行状态中的就绪状态 等待 CPU 调度，进入该状态的方法比如 阻塞获取锁、IO 事件
-
-
-
-终止（TERMINATED）：线程发生异常没有 try-catch 或者 执行完成 退出 run() 
-
-
-
- ![img](https://greenhathg.github.io/2019/08/04/Java%E7%BA%BF%E7%A8%8B%E7%9A%84%E7%8A%B6%E6%80%81/3.jpeg) 
-
-
-
-
-
-> ### 3、线程池的状态
+## 5、线程池的状态变化
 
 ```java
     private static final int RUNNING    = -1 << COUNT_BITS;
@@ -220,7 +149,7 @@ TERMINATED：线程池的最终状态，表示线程池彻底终止了
 
 ## 6、java 线程 和 操作系统线程的关系
 
-具体看  https://www.cnblogs.com/lusaisai/p/12729334.html 
+[java 线程如何产生？]( https://www.cnblogs.com/lusaisai/p/12729334.html)
 
 
 

@@ -340,8 +340,6 @@ JDK 8 在最开始会判断头节点是否是目标节点，然后再判断是�
 
 JDK 7 的 hash 算法没什么好讲的，为了让高位也参加运算，所以进行繁琐的 ^ 操作
 
-里面最开始有一个初始变量 hashSeed，它在一般情况下都是 0，不会发生改变（除非在 JVM 中配置参数），因此同一个 key value 无论经过多少次 hash() 得到的结果都是一样的
-
 ```java
 //JDK 7 的 hash 算法比 JDK 8 的复杂很多
 final int hash(Object k) {
@@ -353,6 +351,8 @@ final int hash(Object k) {
     return h ^ (h >>> 7) ^ (h >>> 4);
 }
 ```
+
+里面最开始有一个初始变量 hashSeed，它在一般情况下都是 0，不会发生改变（除非在 JVM 中配置参数），该参数的目的是通过添加一个随机数来参与 hash 运算，防止别人猜测到 hash 计算值，防止 Hash Flooding（哈希洪水攻击）[哈希洪水攻击](https://www.zhihu.com/question/286529973/answer/679818605)
 
 
 
@@ -376,6 +376,8 @@ static final int hash(Object key) {
     return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
 }
 ```
+
+JDK 8 通过将转换为红黑树来提高查询效率，每个操作的时间复杂度为 O(logn)，不知道作者是不是因为感觉使用红黑树降低了时间复杂度所以不再需要 哈希种子 来防止哈希洪水攻击了
 
 
 

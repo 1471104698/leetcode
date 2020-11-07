@@ -89,7 +89,7 @@ public T get() {
             return result;
         }
     }
-    //到这里表示 this 没有对应任何 value，那么调用 setInitialValue() 创建 value 进行对应
+    //到这里表示没有存储 key，那么调用 setInitialValue() 获取一个 value 来对应 key
     return setInitialValue();
 }
 private Entry getEntry(ThreadLocal<?> key) {
@@ -122,6 +122,42 @@ private Entry getEntryAfterMiss(ThreadLocal<?> key, int i, Entry e) {
         e = tab[i];
     }
     return null;
+}
+```
+
+
+
+在 get() 中查找如果不存在 key，在最后调用了 setInitialValue() 方法
+
+```java
+private T setInitialValue() {
+    //调用 initialValue() 获取初始值，没有重写时，返回的是 null
+    T value = initialValue();
+    Thread t = Thread.currentThread();
+    //将 value = null 和 ThreadLocal 进行绑定
+    ThreadLocalMap map = getMap(t);
+    if (map != null)
+        map.set(this, value);
+    else
+        createMap(t, value);
+    return value;
+}
+
+protected T initialValue() {
+    return null;
+}
+```
+
+我们可以通过继承 ThreadLocal 重写 initialValue() 方法来指定初值，这样不 set() ，而直接调用 get() 时也能够获取初始值然后存储进 ThreadLocalMap 中
+
+在 ReentrantReadWriteLock 中就这么做了
+
+```java
+static final class ThreadLocalHoldCounter
+    extends ThreadLocal<HoldCounter> {
+    public HoldCounter initialValue() {
+        return new HoldCounter();
+    }
 }
 ```
 

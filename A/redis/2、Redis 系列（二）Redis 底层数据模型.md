@@ -737,7 +737,46 @@ dict 即内部整合了两张哈希表，即 两个 HashMap，用于渐进式 re
 
 
 
-## 3、redis 为什么使用跳表而不使用 红黑树/B+树
+## 3、redis 特殊数据结构
+
+redis 有三种特殊的数据结构：bitmap、HyperLogLog、Geo
+
+
+
+bitmap 即位图算法，操作的是 bit，主要操作命令行有 
+
+- setbit key offset value：给 key 的 offset 位置的 bit 设置值为 value，由于是 bit，所以 value 只能是 0 或者 1
+- getbit key offset：获取 key offset 位置的 bit 值，返回 0 或者 1
+- bitcount key [bytes_start, bytes_end]：返回 key 字符范围存在多少个 1
+
+
+
+Hyperloglog ：用来统计个数
+
+```shell
+127.0.0.1:6379> pfadd hyper 1 2 3 4 5
+(integer) 1
+127.0.0.1:6379> pfcount hyper
+(integer) 5
+127.0.0.1:6379> pfadd hyper 3 4 5
+(integer) 0
+127.0.0.1:6379> pfcount hyper
+(integer) 5
+127.0.0.1:6379> pfadd hyper 3 4 5 6
+(integer) 1
+127.0.0.1:6379> pfcount hyper
+(integer) 6
+127.0.0.1:6379> pfadd hyper 3 4 5 6 7 8 
+(integer) 1
+127.0.0.1:6379> pfcount hyper
+(integer) 8
+```
+
+可以看出它只是统计元素出现的个数，而不会统计元素出现次数以及出现了什么元素，具有 HashSet 的去重，但是不知道有什么元素，相当于调用了 HashSet 的 size()
+
+
+
+## 4、redis 为什么使用跳表而不使用 红黑树/B+树
 
 跳表 和 红黑树 时间复杂度都是 O(logn)
 

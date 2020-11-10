@@ -63,9 +63,13 @@ select id from user
 
 但不都是在同一棵 聚簇索引树上进行扫描的吗？为什么会存在这些差距？
 
-因为**第一条 sql 的全表扫描需要访问到 叶子节点，需要进行更多次的 磁盘 IO**
+以下是 B+ 索引树的结构
 
-而**第二条 sql 虽然也是全表扫描，但是它不需要触及到叶子节点，因为它要获取的仅仅是作为主键的 id 值**
+如果我们 select * from user，那么需要查找到叶子节点，并且将内部的 data 全部搜索出来
+
+如果我们 select id from user，那么只需要查找到叶子节点就可以获取到所有的 id，不需要再去搜索 data，减少了磁盘 IO
+
+![img](http://cdn.17coding.info/WeChat%20Screenshot_20190621220003.png)
 
 
 

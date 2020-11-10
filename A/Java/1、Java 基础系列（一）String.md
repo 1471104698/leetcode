@@ -268,7 +268,9 @@ class A {
 ```java
 public class A {
     public static void main(String[] args) {
-        String s = "a" + "b" + "c" + "d" + "e".length();
+        String a = "a";
+        String b = "b";
+        String c = "xx" + "yy " + "e".length() + a + "zz" + "mm" + b;
     }
 }
 ```
@@ -278,27 +280,38 @@ public class A {
 这种解除语法糖后就是
 
 ```java
-String s = new StringBuilder().append("abcd").append("e".length()).toString();
+String s = new StringBuilder()
+    .append("xxyy")
+    .append("e".length())
+    .append("a")
+    .append("zz").append("mm")
+    .append("b")
+    .toString();
 ```
 
 因为 e 需要求 length()，所以它会单独成为一个字符串，而前面的是字面量的拼接，因此在编译器就可以确定
 
-因此最终 "abcde" 和 "e" 存在 ldc 指令，并且还需要使用 StringBuilder 进行拼接
+后面由于存在变量，所以 "zz" 和 "mm" 不会进行合并
 
 ```java
-    Code:
-      stack=2, locals=2, args_size=1
-         0: new           #2                  // class java/lang/StringBuilder
-         3: dup
-         4: invokespecial #3                  // Method java/lang/StringBuilder."<init>":()V
-         7: ldc           #4                  // String abcd
-         9: invokevirtual #5                  // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
-        12: ldc           #6                  // String e
-        14: invokevirtual #7                  // Method java/lang/String.length:()I
-        17: invokevirtual #8                  // Method java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;
-        20: invokevirtual #9                  // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
-        23: astore_1
-        24: return
+        35: ldc           #8                  // String a
+        37: astore_3
+        38: ldc           #9                  // String b
+        40: astore        4
+        42: new           #10                 // class java/lang/StringBuilder
+        45: dup
+        46: invokespecial #11                 // Method java/lang/StringBuilder."<init>":()V
+        49: ldc           #12                 // String xxyy
+        51: invokevirtual #13                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+        54: aload_3
+        55: invokevirtual #13                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+        58: ldc           #14                 // String zz
+        60: invokevirtual #13                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+        63: ldc           #15                 // String mm
+        65: invokevirtual #13                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+        68: aload         4
+        70: invokevirtual #13                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+        73: invokevirtual #16                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
 
 ```
 
@@ -321,8 +334,6 @@ public class A {
 
 可以发现，"a" 和 "b" 都存在 ldc 指令，而 拼接的 c 和 d 没有对应的 ldc 指令
 
-即如果拼接的过程中 存在变量，那么由于存在不确定性，所以不会在堆中创建对象并且将引用存储到字符串常量池中
-
 ```java
     Code:
       stack=2, locals=5, args_size=1
@@ -337,24 +348,21 @@ public class A {
 
 ```
 
-因为变量的值是可变的，并且是不可估计的，编译器无法确定变量的值，比如
+因为变量存在不确定性，在编译期间编译器无法确定最终生成的值，比如可能存在 scanner 的情况，因此编译器干脆就不对存在变量拼接的字符串进行 ldc
+
+比如下面的这种情况：编译期间编译器并不知道 a 的值为多少，对于 c 的值也许可以通过上下文获取，不过为了避免多种情况判断，所以编译器干脆不管了
 
 ```java
 public class A {
     public static void main(String[] args) throws InterruptedException {
         String a = new Scanner(System.in).next();
-        String c = null;
-        if(a.equals("1")){
-            c = "2";
-        }else{
-            c = "3";
-        }
+        String c = "c";
         String d = a + c;
     }
 }
 ```
 
-这种情况下编译器怎么知道 a 和 c 的值是多少。。。所以是无法进行拼接的
+
 
 
 
@@ -386,48 +394,6 @@ public class A {
          9: return
 
 ```
-
-
-
-**情况七：**
-
-```java
-public class A {
-    public static void main(String[] args) {
-        final String a = new Scanner(System.in).next();
-        final String b = "b";
-        String c = a + b;
-    }
-}
-```
-
-可以看出 只有 b 有 ldc，因为 a 需要等待用户输入，final 只能保证不可变，但是如果值不确定还是不行，所以 a 和 c 都没有 ldc
-
-```java
-    Code:
-      stack=3, locals=4, args_size=1
-         0: new           #2                  // class java/util/Scanner
-         3: dup
-         4: getstatic     #3                  // Field java/lang/System.in:Ljava/io/InputStream;
-         7: invokespecial #4                  // Method java/util/Scanner."<init>":(Ljava/io/InputStream;)V
-        10: invokevirtual #5                  // Method java/util/Scanner.next:()Ljava/lang/String;
-        13: astore_1
-        14: ldc           #6                  // String b
-        16: astore_2
-        17: new           #7                  // class java/lang/StringBuilder
-        20: dup
-        21: invokespecial #8                  // Method java/lang/StringBuilder."<init>":()V
-        24: aload_1
-        25: invokevirtual #9                  // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
-        28: ldc           #6                  // String b
-        30: invokevirtual #9                  // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
-        33: invokevirtual #10                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
-        36: astore_3
-        37: return
-
-```
-
-
 
 
 

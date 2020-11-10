@@ -1,14 +1,10 @@
 
 
-## 1、cookie、session、token 的关系
+## 1、cookie、session、token
 
-### 1、产生的背景
+> ### 故事背景
 
-具体看：
-
- https://zhuanlan.zhihu.com/p/63061864 
-
- https://zhuanlan.zhihu.com/p/66754258 
+[发展史](https://zhuanlan.zhihu.com/p/63061864 )
 
 
 
@@ -38,23 +34,53 @@
 
 
 
-### 2、cookie、session、token 是什么？
+> ### cookie 和 session
 
-**cookie**：cookie 是浏览器的一段纯文本信息，用户第一次访问时服务端会生成一个 cookie 和 一个 session，然后将 session 中的 JSESSIONID存储在 cookie 中，返回给客户端存储，**浏览器上每个域名对应一个 cookie**，每次发送请求前浏览器会自动去查看 是否缓存了对应域名的 cookie，如果有则获取然后一并发送给服务端
-
-
-
-**session：**session 是存储在服务端的，session 可以存储某个用户的很多数据，这样在用户登录查询的时候就减少对数据库的操作，但是占内存；客户端只存储一个 JSESSIONID，并且如果开启了 cooike 那么就存储在 cookie 中，如果没有那么客户端就单纯存储一个 JSESSIONID 字符串
+[cookie session 详解]( https://www.cnblogs.com/huchong/p/8481779.html )
 
 
 
-**token：**解决 服务端存储 session 的问题，服务端不保存，只需要将 token 发送给客户端，后续用户登录的时候将 token 发过来按照一定规则进行验证即可
+**cookie 和 session 用来解决 HTTP 无状态的问题**
+
+cookie 保存在浏览器，session 保存在服务器
 
 
 
-当浏览器禁用 cookie 时，存在两种验证方式：
+cookie 和 session 的联系使用的是 sessionId，当浏览器第一次访问服务器时，服务器会将 为用户生成一个随机数作为 sessionId，将它存储到 cookie 和 session 中，然后将 cookie 设置到响应头的 set-cookie 字段中，返回给浏览器；
 
-- 浏览器只保存 sessionID
+由于 cookie 是保存在浏览器的，所以不安全，如果保存用户信息的话可能会被盗取或者篡改，解决方法有二：
+
+- 将用户信息加密然后存储到 cookie 中
+- 将用户信息保存到 session 中
+
+一般使用的是第二种方法，由 session 保存用户的信息，但是这种方法的缺点是服务器保存用户信息，对服务器压力大
+
+验证：浏览器再次发送请求，这次请求中携带了 cookie，服务器获取到 cookie，得到里面的 sessionId，然后通过 sessionId 获取对应的 session，如果不为空，那么表示用户已经登录了，我们可以直接从 session 中获取到用户的信息，这样就记录了用户的状态，免去了用户登录的过程
+
+
+
+**cookie 和 session 的区别：**
+
+- cookie 保存在客户端；session 保存在服务器（不存储在内存中，而是存储在数据库，分布式情况下存储在 redis）
+
+- 浏览器限制的 cookie 的存储容量有限，一般是 4KB；session 没有上限，但是一般不能存储过多，否则服务器压力过大
+
+- cookie 只能存储文本信息；session 没有大小、类型、安全限制，可以存储任意数量、任意类型、任意安全级别的数据
+
+  ```java
+  HTTP/1.1 200 OK
+  Content-type: text/html
+  Set-Cookie: "name = value; path=/"	//键值对的形式，key=value
+  Other-header: other-header-value
+  ```
+
+- cookie 支持跨域，比如将 domain 设置为 ` .test.com` ，那么访问一切以该 domain 为后缀的域名都能够携带该 cookie；session 不支持跨域，session 仅在它所在的域名有效（可以通过存储到 redis 解决）
+
+
+
+**当浏览器禁用 cookie 时，存在两种验证方式：**
+
+- 浏览器只保存 sessionID，然后请求的时候在 URL 上携带 sessionId
 - 浏览器保存 token
 
 

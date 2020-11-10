@@ -80,6 +80,8 @@ Spring 事务的隔离级别 跟 数据库事务 的隔离级别基本一致，�
 
 
 
+
+
 #### 3.2.1、REQUIRED
 
 以下 A 和 B 都是 REQUIRED，表示 A 和 B 共用一个事务
@@ -97,10 +99,13 @@ public class AService {
     @Autowired
     BService bService;
 
-    @Transactional(propagation = Propagation.REQUIRED)
+    @Transactional(propagation = ????))	//后续讨论填充
     public void A() {
         Te te = new Te(6, "1", "1");
-        userMapper.insertTe(te);
+        //1.没有捕获异常
+        // userMapper.insertTe(te); 
+        
+        //2.捕获异常
         try {
             bService.B();
         } catch (Exception e) {
@@ -117,7 +122,7 @@ class BService {
     @Resource
     UserMapper userMapper;
 
-    @Transactional(propagation = Propagation.REQUIRED)
+    @Transactional(propagation = ????)	//后续讨论填充
     public void B() {
         Te te = new Te(7, "2", "2");
         userMapper.insertTe(te);

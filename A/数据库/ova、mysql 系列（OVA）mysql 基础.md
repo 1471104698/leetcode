@@ -124,9 +124,51 @@ Unknown column xxx in ‘where clause’
 
 
 
+## 4、select 语句各部分的执行顺序
 
 
-## 4、Mysql 查询优化
+
+```sql
+FROM ->
+WHERE -> 
+GROUP BY -> 
+SELECT -> 
+HAVING -> 
+DISTINCT -> 
+UNION -> 
+ORDER BY
+```
+
+**order by 是最后执行的，在它眼里只有最终的数据，没有什么分组不分组的**
+
+
+
+对于别名，按照道理来讲，只有在前面执行定义的别名，才可对后面执行的部分可见，比如 from 定义的表的别名对 where 可见
+
+虽然很多文章都说 having 是在 select 之前执行的，但是按理说 select 定义的别名对于 having 应该是不可见的，但实际上却是可见的，同时在 9 中存在以下 sql 语句
+
+```sql
+ ①
+select s1.id, s1.name, s1.cid, s1.score,
+	  ②
+	(select count(1) from  sc s2 where  s1.cid = s2.cid and	 s1.score < s2.score) + 1 as rank
+from  sc s1
+HAVING 
+	rank <= 3 
+order by 
+	s1.cid, 
+	rank;
+```
+
+我们可以发现 having 竟然能够使用 select ① 经过一系列查表操作后得到的 rank 字段，如果是 having 先执行，显然对于 having 来说这个 rank 还没有求出来，所以是不可知的，但是对于 having 可见，**所以 having 应该是在 select 之后执行**
+
+```
+我不关注理论，我只关注结果，结果是如此，那么我就如此认为，也许是 mysql 内部的优化，不过最终呈现的结果就是 having 在 select 之后执行，那么我也如此认为
+```
+
+
+
+## 5、Mysql 查询优化
 
 1、给频繁查询的列 加索引
 
@@ -173,7 +215,7 @@ Unknown column xxx in ‘where clause’
 
 
 
-## 5、join 连接
+## 6、join 连接
 
 我们分成两部分来讲解 join，分别是 实现效果 和 底层实现，根据实现效果能够更加容易了解底层实现，了解底层实现就更加容易优化 sql
 
@@ -304,7 +346,7 @@ BNLJ 加入了 缓存 join buffer，每次查询不再是获取外层表的一�
 
 
 
-## 6、group by
+## 7、group by 如何使用？
 
 > ### group by 实现效果
 
@@ -343,3 +385,166 @@ group by 返回的是每个分组的对应的结果，是一个结果集，而�
 
 
 如果我们是想要获取每个人的奖金排序，那么直接使用 order by name, salary 即可，即先对 name 进行排序，这样同个人就在同一个范围内，然后对 salary 进行排序，这样就是对同个人的 salary 进行排序
+
+
+
+
+
+## 8、count() 函数
+
+count() 函数用于统计行数
+
+**count(*) 和 count(1) 通过 explain 后可以发现它们的执行计划是一样的**
+
+对于查询优化器而言，count(*) == count(1)
+
+有些人把 count(1) 当作是按照 第一列字段 来查询行数，其实不是这样的，1 实际上是一个伪列，它不是一个真实存在的列
+
+
+
+**count() 和 order by 不同**
+
+order by 1, 2 这种表示先 按照第 1 列排序，再按照第 2 列排列，1 和 2 都是表示对应的列
+
+而 count(1) 单纯只是表示查找所有数据行，1 没有实际意义，我们还可以写 count(2)、count(3)、count("fuck")，效果都是一样的
+
+所有的写法都跟 count(*) 得到的执行计划一致，因此**不存在效率差别**
+
+
+
+但是，如果我们 count(列名)，那么就是表示按照某个字段来进行查询行数，它会忽略掉 查询列的列值值为 NULL 的行数，即如果 10 行数据中 查询列名 有 3 行数据为 NULL，那么 count(列名) 得到的结果为 7
+
+
+
+**关于 count(distinct column(s)) 函数：**
+
+ count(distinct column(s)) 表示查找所指 列 都不为 NULL 的行数，并且会将相同的数据行进行去重
+
+存在以下表数据：
+
+*![image.png](https://pic.leetcode-cn.com/1604850172-kntgTm-image.png)*
+
+```sql
+select count(f1) from test;
+select count(distinct f1, f2) from test;
+```
+
+输出结果：
+
+```java
+4
+2
+```
+
+
+
+count(f1) 会自动将 f1 列中含有 NULL 值的数据行忽略，所以第一句 sql 忽略 id = 2 的数据行，结果为 3
+
+count(distinct f1, f2) 表示统计 f1 和 f2 列 中都不为 NULL 的数据行，并且如果存在两个以上的数据行  f1 和 f2 都相同，那么进行去重，因此被忽略的 id = 2, 4 是因为存在 NULL，被忽略的 id = 5 或 id = 3 是因为它们的 f1 和 f2 都相同，所以进行去重
+
+最终剩下 id = 1, 3 两个数据行，结果为 2
+
+
+
+
+
+## 9、求各科成绩前三的学生
+
+[各科求前三详解](https://blog.csdn.net/qq_41933709/article/details/84928157 )
+
+
+
+mysql 中有这么一道经典的题目：求 各科成绩前三的学生
+
+
+
+第一印象来说，感觉应该是对 科目 进行 group by，然后对每个分组进行 order by，再对每个分组 limit 0, 3 获取前 3 名的学生 id
+
+但是这样实现就很难受了，因为 group by 和 order by 一起使用时，order by 并不会对 分组内排序，而是对分组外排序，这样的话显然就无法直接实现 每个分组 order by（显然是我自己能力不够，因此只能另辟蹊径）
+
+
+
+（我们这里将题目改为 求 每个班级成绩前三的学生）
+
+我们可以先计算出每个班级中每个学生的排名，如何计算排名？
+
+通过自连接，对于每一行数据行，我们找到 在 **同一班级中，比当前数据行的 score 高的所有数据行**，然后使用 count(1) 统计结果集行数，即可得到排名
+
+```sql
+ ①
+select s1.id, s1.name, s1.cid, s1.score,
+	  ②
+	(select count(1) from  sc s2 where  s1.cid = s2.cid and	 s1.score < s2.score) + 1 as rank
+from 
+	sc s1
+order by
+	rank;
+```
+
+sql 形式格式化后：
+
+```sql
+select 
+	s1.id, s1.name, s1.cid, s1.score,
+	(
+        select
+        	count(1)
+        from 
+        	sc s2
+        where 
+        	s1.cid = s2.cid
+        and	
+        	s1.score < s2.score
+	) + 1 as rank
+from 
+	sc s1
+order by
+	rank;
+```
+
+查询结果为：
+
+*![image.png](https://pic.leetcode-cn.com/1604910232-SaKJQt-image.png)*
+
+
+
+首先讲解一下  select ② 是如何运作的：
+
+可以看出来， select ② 是作为 select ① 的一个查询结果字段的，当 where 查询完，筛选出了满足条件的所有数据行，作为虚拟表 t1，然后进入到 select ① 阶段
+
+在 select ① 这里存在一个 select ②，select ② 会对 虚拟表 t1 再进行一次查询，这里是 t1 表 和 sc 表的条件筛选，生成只有 rank 字段的 t2 表，然后 t1 表 和 t2 表进行拼接，构成 t3 表
+
+最后 order by 对 t3 表按照 rank 进行排序
+
+
+
+但是上面的 sql 语句还没有完成，它只是获取了每个学生在他班级中的排名，没有得到每个班级的前三名，因此我们可以使用 having 来根据 rank 进行筛选，having rank <= 3 来获取排名前三的学生
+
+```sql
+SELECT 
+	s1.*, (
+				select 
+					count(1) 
+				from 
+					sc s2 
+				where 
+					s1.cid = s2.cid 
+				and 
+					s1.score < s2.score
+			) + 1 as rank 
+from 
+	sc s1 
+HAVING 
+	rank <= 3 
+order by 
+	s1.cid, 
+	rank;
+```
+
+输出结果：
+
+![1604912168673](C:\Users\蒜头王八\AppData\Roaming\Typora\typora-user-images\1604912168673.png)*
+
+
+
+但是这种是并列排名的，即如果两个学生的 score 一样的话，那么它们的排名相同，比如上的 name 为 a 和 aa，它们的分数相同，排名也相同，是并列的

@@ -8,12 +8,12 @@
 
 **三次握手过程：**
 
-最开始服务端处于 LISTEN 状态
+服务器 socket bind() 绑定监听的 ip 和 端口，然后调用 accept() 处于 LISTEN 状态
 
-- 客户端 初始化一个 seq_1，发送 SYN 包给服务端，处于 SYN_SENT 状态（SYN 发送）
-- 服务端接收到后，初始化一个 seq_2，以及一个 ACK = seq_1 + 1，发送 SYN + ACK 包给客户端，处于 SYN_RCVD 状态（SYN 接收）
-- 客户端收到后，seq_1 = seq_1 + 1，ACK = seq_2 + 1，然后发送一个 ACK 包给服务端，此时处于 ESTABLISHED 状态（已连接）
-- 服务端受到 ACK 后，处于 处于 ESTABLISHED 状态（已连接）
+- 第一次握手：客户端 socket 调用 conncet()，内核创建一个 TCP 报文，初始化一个 seq_1，放在 序列号位置，标志位置为 SYN，发送报文，处于 SYN_SENT 状态（SYN 发送）
+- 第二次握手：服务端 收到 SYN 包，内核创建一个 TCP 报文，初始化一个 seq_2 放在序列号位置，然后将确认号位置设置为 seq_1 + 1，标志位置为 SYN 和 ACK，发送报文，处于 SYN_RCVD 状态（SYN 接收）
+- 第三次握手：客户端收到 SYN + ACK 包，内核创建一个 TCP 报文，序列号设置为 seq_1 = seq_1 + 1，确认号设置为  seq_2 + 1，标志位置为 ACK，发送报文，此时处于 ESTABLISHED 状态（已连接）
+- 服务端收到 ACK，处于 处于 ESTABLISHED 状态（已连接）
 
 
 

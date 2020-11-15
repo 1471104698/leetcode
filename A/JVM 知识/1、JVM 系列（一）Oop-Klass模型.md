@@ -64,19 +64,43 @@ typedef class     typeArrayOopDesc*            typeArrayOop;
   - objArrayOopDesc 用来表示普通的对象的数组类型
   - typeArrayOopDesc 用来表示基本数据的数组类型
 
-OOP 主要由两部分组成：对象头 和 对象体
-
- ![img](https://upload-images.jianshu.io/upload_images/9300974-57e8d1d5b73d75e8.png?imageMogr2/auto-orient/strip|imageView2/2/w/429/format/webp)
 
 
+普通对象：
+
+```ruby
+|--------------------------------------------------------------|
+|                     Object Header (64 bits)                  |
+|------------------------------------|-------------------------|
+|        Mark Word (32 bits)         |    Klass Word (32 bits) |
+|------------------------------------|-------------------------|
+```
+
+数组对象：
+
+```ruby
+|---------------------------------------------------------------------------------|
+|                                 Object Header (96 bits)                         |
+|--------------------------------|-----------------------|------------------------|
+|        Mark Word(32bits)       |    Klass Word(32bits) |  array length(32bits)  |
+|--------------------------------|-----------------------|------------------------|
+```
 
 
+
+OOP 对象 主要由两部分组成：对象头 和 对象体
+
+<img src="https://pic2.zhimg.com/80/v2-146da803566f0401759e8099d955dd09_720w.jpg" style="zoom:60%;" />
+
+ 
 
 ### 2、OOP 对象头
 
+
+
 对象头主要有两个属性：_mark 和 _metadata
 
-- _mark 记录的是对象的 hashCode、GC 年龄、拥有者线程 ID、锁状态（sync 锁利用的就是这里面的属性）
+- _mark 记录的是对象的 hashCode、GC 年龄、拥有者线程 ID、锁状态
 - _metadata 指向方向区中 Klass 的元数据，因此 也叫做元数据指针
 
 ```C++
@@ -84,15 +108,13 @@ OOP 主要由两部分组成：对象头 和 对象体
 class oopDesc {
     
  private:
-  // markOop 对象，用于存储对象的运行时记录信息，如哈希值、GC分代年龄、锁状态等
-  volatile markOop  _mark;
+  //markOop 对象，用于存储对象的运行时记录信息，如哈希值、GC分代年龄、锁状态等
+  volatile markOop  _mark;	//（我们常说的 Mark Word）
     
-  // Klass指针的联合体，指向当前对象所属的Klass对象
+  //元数据指针
   union _metadata {
-    // 未采用指针压缩技术时使用
-    Klass*      _klass;
-    // 采用指针压缩技术时使用
-    narrowKlass _compressed_klass;
+    Klass*      _klass;	// 方法区中的 Klass 对象，未采用指针压缩技术时使用
+    narrowKlass _compressed_klass;	// 方法区中的 Klass 对象，采用指针压缩技术时使用
   } _metadata;
     
  //...
@@ -101,49 +123,49 @@ class oopDesc {
 
 
 
-在对象头的 markOop 中，维护了一个 ObjectMonitor，就是用来记录 sync 重量级锁时的状态
+_mark 数据结构如下：
 
 ```C++
-class BasicLock;
-class ObjectMonitor;	//
-class JavaThread;
-
+#include "oops/oop.hpp"
+class ObjectMonitor;	//维护了一个 ObjectMonitor 对象，仅在 重量级锁状态时存在，所以这里不会直接赋值
+class JavaThread;		//持有锁的线程，可以当作 线程 id，偏向锁就是操作这个 JavaThread，它也仅在偏向锁状态时存在
 class markOopDesc: public oopDesc {
-    //xxx
+
+ public:
+  // Constants
+  enum { age_bits                 = 4,	//GC 年龄，表示经过多少次 GC 还存活，用于新生代晋升老年代，占 4 bit
+         lock_bits                = 2,	//锁标志位，占 2 bit
+         biased_lock_bits         = 1,  //偏向锁标志位，占 1 bit
+         max_hash_bits            = BitsPerWord - age_bits - lock_bits - biased_lock_bits,
+         hash_bits                = max_hash_bits > 31 ? 31 : max_hash_bits, //hashCode，占 25 bit
+         cms_bits                 = LP64_ONLY(1) NOT_LP64(0),
+         epoch_bits               = 2
+  };
+    //上面的 biased_lock_bits + lock_bits
+  enum { locked_value             = 0,	//0 00 轻量级锁
+         unlocked_value           = 1,	//0 01 无锁
+         monitor_value            = 2,	//0 10 重量级锁
+         marked_value             = 3,	//0 11 GC 标志，设置为该标志位，表示该对象可以进行回收
+         biased_lock_pattern      = 5	//1 01 偏向锁
+             //无锁 和 偏向锁 的 锁标志位都是 01，通过偏向锁标志位来进行判断是 无锁还是偏向锁
+  };
 }
 ```
 
-ObjectMonitor 结构如下：
+(关于 sync 锁的部分，看 另外一个 md，这里不细讲)
 
-```C++
-ObjectMonitor() {
-    _header       = NULL;//markOop对象头
-    _count        = 0;
-    _waiters      = 0,//等待线程数
-    _recursions   = 0;//重入次数
-    _object       = NULL;//监视器锁寄生的对象。锁不是平白出现的，而是寄托存储于对象中。
-    _owner        = NULL;//占有锁的线程
-    _WaitSet      = NULL;//处于wait状态的线程，会被加入到waitSet，比如调用 wait()；
-    _WaitSetLock  = 0;
-    _Responsible  = NULL;
-    _succ         = NULL;
-    _cxq          = NULL;
-    FreeNext      = NULL;
-    _EntryList    = NULL;//处于阻塞block 状态的线程，会被加入到entryList，比如在 sync 锁处竞争锁而阻塞；
-    _SpinFreq     = 0;
-    _SpinClock    = 0;
-    OwnerIsThread = 0;
-    _previous_owner_tid = 0;//监视器前一个拥有者线程的ID
-}
+
+
+综上，**对象头布局：**
+
 ```
+				- ObjectMonitor 
+		- _mark 
+				- 锁标志、HashCode、GC 年龄
+oopDesc
+		- _metadata
 
-monitor 对象维护了两个队列：WaitSet 和 EntryList
-
-当在 sync 处竞争锁时，没有获取锁的会进入 EntryList，即进入阻塞状态
-
-当获取到锁后，会将 monitor 中的 owner 设置为当前线程，然后将 count = 1，表示重入度为 1，
-
-如果调用 wait()，那么就会将锁释放，即将 当前线程放入 WaitSet 中，然后将 owner 设置为 null，count 设置为 1，但是进入到 WaitSet 封装的节点会记录当前线程的重入度，等到获取线程的时候会重新将 count 复原
+```
 
 
 
@@ -504,198 +526,41 @@ Klass 对象 和 Class 对象实际上是双向指向的，因此 Class 对象�
 
 
 
-## 4、JVM 计算变量偏移量 的源码分析
+## 4、OOP 对象体如何保存数据
 
-具体看 [类变量加载源码分析]( https://blog.csdn.net/li1376417539/category_9390865.html ) 
+[类变量加载源码分析]( https://blog.csdn.net/li1376417539/category_9390865.html ) 
 
  [JVM-如何保存-Java-对象](http://blog.zhangjikai.com/2019/09/08/%E3%80%90Java%E3%80%91-JVM-%E5%A6%82%E4%BD%95%E4%BF%9D%E5%AD%98-Java-%E5%AF%B9%E8%B1%A1/) 
 
 
 
-JVM 类加载是将 class 文件的各部分结构转换为 JVM 内存数据结构，这里是将变量转换为 Field，计算好每个变量的偏移量
+OOP 对象体对于基本数据类型，直接在内存上存储数据，如果是引用类型，那么存储的是指针对象的指针
 
-调用 parse_fields() 进行计算，方法如下
-
-```C++
-typeArrayHandle ClassFileParser::parse_fields(Symbol* class_name,
-                                              constantPoolHandle cp, bool is_interface,
-                                              FieldAllocationCount *fac,
-                                              objArrayHandle* fields_annotations,
-                                              u2* java_fields_count_ptr, TRAPS) {
-    //二进制数流
-    ClassFileStream* cfs = stream();
-    typeArrayHandle nullHandle;
-    // length，获取Java类域变量的数量
-    cfs->guarantee_more(2, CHECK_(nullHandle));  
-    u2 length = cfs->get_u2_fast();
-    *java_fields_count_ptr = length;
-
-    int num_injected = 0;
-    /*
-    这里使用 for 循环遍历所有的变量
-    */
-    for (int n = 0; n < length; n++) {
-        cfs->guarantee_more(8, CHECK_(nullHandle));  
-        
-        //读取变量访问表示，如private|public等
-        AccessFlags access_flags;
-        
-        jint flags = cfs->get_u2_fast() & JVM_RECOGNIZED_FIELD_MODIFIERS;
-        verify_legal_field_modifiers(flags, is_interface, CHECK_(nullHandle));
-        access_flags.set_flags(flags);
-        
-        //读取变量名称索引
-        u2 name_index = cfs->get_u2_fast();
-        
-        int cp_size = cp->length();
-        check_property(
-            valid_cp_range(name_index, cp_size) && cp->tag_at(name_index).is_utf8(),
-            "Invalid constant pool index %u for field name in class file %s",
-            name_index, CHECK_(nullHandle));
-        Symbol*  name = cp->symbol_at(name_index);
-        verify_legal_field_name(name, CHECK_(nullHandle));
-        
-        //读取类型索引
-        u2 signature_index = cfs->get_u2_fast();
-        
-        check_property(
-            valid_cp_range(signature_index, cp_size) &&
-            cp->tag_at(signature_index).is_utf8(),
-            "Invalid constant pool index %u for field signature in class file %s",
-            signature_index, CHECK_(nullHandle));
-
-        u2 constantvalue_index = 0;
-        bool is_synthetic = false;
-        u2 generic_signature_index = 0;
-        bool is_static = access_flags.is_static();
-        
-        //读取变量属性
-        u2 attributes_count = cfs->get_u2_fast();
-        if (attributes_count > 0) {
-            parse_field_attributes(cp, attributes_count, is_static, signature_index,
-                                   &constantvalue_index, &is_synthetic,
-                                   &generic_signature_index, &field_annotations,
-                                   CHECK_(nullHandle));
-            if (field_annotations.not_null()) {
-                if (fields_annotations->is_null()) {
-                    objArrayOop md = oopFactory::new_system_objArray(length, CHECK_(nullHandle));
-                    *fields_annotations = objArrayHandle(THREAD, md);
-                }
-                (*fields_annotations)->obj_at_put(n, field_annotations());
-            }
-        }
-        //判断变量属性
-        BasicType type = cp->basic_type_for_signature_at(signature_index);
-
-        //xxxxxxx 其他代码
-    }
-
-
-    return fields;
-}
+```
+比如 OOP 对象体 起始地址编号为 10
+地址编号 10 存储的是 int a 的值，这个地址编号 10 占 4B
+地址编号 11 存储的是 float b 的值，这个地址编号 11 占 4B
+地址编号 12 存储的是 User user 引用的对象地址，一个地址占 4B，所以 这个地址编号 12 占 4B
 ```
 
-从源码可以看出 JVM 解析变量的逻辑：
-
-- 获取当前类中所有 成员变量的个数
-- 获取变量的访问修饰符
-- 获取变量名
-- 获取变量类型
-- 统计各个类型的变量的个数（静态变量、非静态变量）
 
 
+JVM 类加载是将 class 文件的各部分结构转换为 JVM 内存数据结构，在 Klass 中是将 每个 field 变量 都转换为 Field 对象
 
-后面就是**计算偏移量**
+**类加载过程中会计算好每个变量在 OOP 对象体重的偏移量，然后将这个偏移量存储到对应的 Filed 对象中**
 
-计算 静态变量（基本数据类型和 OOP对象）和 非静态类型（基本数据类型和 OOP对象） 的总偏移量
+可以看出，每个 field 的偏移量是固定的，由于 Java 中 new 出来的 OOP 对象都是根据 Klass 对象这个模板来创建的，所以在每个创建出来的 OOP 对象中，它们的字段值都是在同一个偏移量
 
-```C++
-instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
-                                                    Handle class_loader,
-                                                    Handle protection_domain,
-                                                    KlassHandle host_klass,
-                                                    GrowableArray* cp_patches,
-                                                    TempNewSymbol& parsed_name,
-                                                    bool verify,
-                                                    TRAPS) {
-    //省略部分代码
- // Field size and offset computation
-    int nonstatic_field_size = super_klass() == NULL ? 0 : super_klass->nonstatic_field_size();
-#ifndef PRODUCT
-    int orig_nonstatic_field_size = 0;
-#endif
-    int static_field_size = 0;
-    //静态 OOP 对象的偏移量
-    int next_static_oop_offset;
-    //静态基本数据类型的偏移量
-    int next_static_double_offset;
-    int next_static_word_offset;
-    int next_static_short_offset;
-    int next_static_byte_offset;
-    int next_static_type_offset;
-    //非静态 OOP 对象的偏移量
-    int next_nonstatic_oop_offset;
-    //非静态基本数据类型的偏移量
-    int next_nonstatic_double_offset;
-    int next_nonstatic_word_offset;
-    int next_nonstatic_short_offset;
-    int next_nonstatic_byte_offset;
-    int next_nonstatic_type_offset;
-    //第一个非静态 OOP 对象的偏移量
-    int first_nonstatic_oop_offset;
-    //第一个非静态基本数据类型的偏移量
-    int first_nonstatic_field_offset;
-    int next_nonstatic_field_offset;
-
-    // Calculate the starting byte offsets
-    next_static_oop_offset      = instanceMirrorKlass::offset_of_static_fields();
-    next_static_double_offset   = next_static_oop_offset +
-                                  (fac.count[STATIC_OOP] * heapOopSize);
-    if ( fac.count[STATIC_DOUBLE] &&
-         (Universe::field_type_should_be_aligned(T_DOUBLE) ||
-          Universe::field_type_should_be_aligned(T_LONG)) ) {
-      next_static_double_offset = align_size_up(next_static_double_offset, BytesPerLong);
-    }
-
-    next_static_word_offset     = next_static_double_offset +
-                                  (fac.count[STATIC_DOUBLE] * BytesPerLong);
-    next_static_short_offset    = next_static_word_offset +
-                                  (fac.count[STATIC_WORD] * BytesPerInt);
-    next_static_byte_offset     = next_static_short_offset +
-                                  (fac.count[STATIC_SHORT] * BytesPerShort);
-    next_static_type_offset     = align_size_up((next_static_byte_offset +
-                                  fac.count[STATIC_BYTE] ), wordSize );
-    static_field_size           = (next_static_type_offset -
-                                  next_static_oop_offset) / wordSize;
-
-    first_nonstatic_field_offset = instanceOopDesc::base_offset_in_bytes() +
-                                   nonstatic_field_size * heapOopSize;
-    next_nonstatic_field_offset = first_nonstatic_field_offset;
-    
-    //省略部分代码 
-```
-
-当总偏移量计算完后，它会分别计算每一个变量的偏移量 offset
+因此 CAS 就是直接通过 unsafe 通过反射获取 field 的偏移量 offset，然后后续直接通过这个 offset 去 OOP 对象体中 获取、修改真实值
 
 
 
-当计算好每个字段后，在 JDK 1.7 中，静态变量是存储在 Class 对象中的，因此 程序员访问静态变量的步骤为：
+非静态变量是可以继承的，无论子类是否重写了父类的字段，在子类 OOP 对象头后面紧跟着的都是**父类的非静态字段**
 
-- 通过 OOP 对象头的 元数据指针找到 方法区中的 Klass
-- 通过 Klass 中的 _java_mirror  指针 和 对应 field 的偏移量 找到堆中的 Class 对象并计算偏移量获取静态变量数据
-
-
-
-由于静态变量不能继承，所以不会去计算父类的静态变量
-
-而非静态变量是可以继承的，无论子类是否重写了父类的字段，在子类 OOP 对象头后面紧跟着的都是父类的非静态字段
-
-当子类重写了父类的字段，那么会先拷贝父类的所有非静态字段，然后再在后面放重写的字段
+当子类重写了父类的字段，那么会先**拷贝父类的所有非静态字段**，然后再在后面放重写的字段
 
  ![img](http://blog.zhangjikai.com/images/jvm-java/instance.png) 
 
 
 
-> ### 类的 private 字段会被子类继承吗？
-
-答案是会的，子类的 OOP 对象头后面会存储父类的所有非静态字段，无论是 private 还是public 还是 final（不是 static final），只是对于 private 字段 子类没有访问权限而已，即存在是存在，但是没有权限访问，相当于是占了内存但是不干事那种
+从上面可以看出，**子类的 OOP 对象体最前面会存储父类的所有非静态字段**，无论是 private 还是public 还是 final，只是对于 private 字段 子类没有访问权限而已，即**存在是存在，但是没有权限访问**，相当于是占了内存但是不干事那种

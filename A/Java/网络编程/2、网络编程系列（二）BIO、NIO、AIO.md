@@ -2,7 +2,7 @@
 
 
 
-具体看 <https://zhuanlan.zhihu.com/p/54580385>
+[网络 IO 详解](https://zhuanlan.zhihu.com/p/54580385)
 
 
 
@@ -12,89 +12,11 @@ IO 即 input/output 的简写，IO 主要分为两种情况：磁盘 IO 和 网�
 
 磁盘 IO 就是直接本地磁盘读写，没什么好说的
 
-网络 IO 就是 socket 通信的 read/write，这里重点讲下 socket
+网络 IO 就是 socket 通信的 read/write
 
+以下讲的 IO 类型都是 网络 IO
 
-
-## 1、socket 通信
-
-![img](https://img-blog.csdn.net/20150510153905472)
-
-> ### socket()
-
-linux 中一切皆文件，socket 也是一个文件。
-
-socket() 会返回一个 socket 描述符，它是唯一标识一个 socket 的，作用跟文件描述符一样
-
-后续对 socket 的操作都是传输该 socket 描述符给内核态进行操作的
-
-
-
-> ### bind()
-
-将该 socket 绑定指定的 ip 和 端口，通过 ip 地址 + 端口 提供服务，相当于是对外开放这个指定的 ip + 端口 的接口
-
-服务端绑定就是对外开放表示客户端来跟这个接口进行通信
-
-客户端绑定就是表示对外跟服务端使用这个接口进行通信
-
-
-
-> ### listen() 和 connect()
-
-服务端在 bind() 绑定 ip + 端口后，调用 listen()，在内核中监听这个 socket，等待客户端连接
-
-客户端在 bind() 后，调用 connect(server_ip) 向指定服务端发起连接
-
-服务端在 listen() 后如果收到客户端的 connect()，这个 connect() 最开始就相当于 TCP 三次握手中的第一次握手，后续会进行两次握手
-
-这里的 listen() 并不会发生阻塞，它会一直进行监听，类似于我们的后台进程，自己在运行
-
-
-
-> ### accept()
-
-当三次握手完成后，客户端的 socket 会放在 全连接队列（accept queue） 中
-
-服务端只需要调用 accept() 就可以获取 全连接队列中的 socket，创建一个与 该 socket 对应的 新 socket，返回给用户进程
-
-当 accept queue 中没有 socket 时，那么会服务器线程会阻塞
-
-
-
-> ### read()、write()
-
-read() 和 write() 都需要深入到 内核中，都是通过系统调用完成的
-
-read() 的系统调用是 recv()，write() 的系统调用是 send()
-
-
-
-在内核中存在两个TCP 缓存区：TCP 发送区、TCP 接收区
-
-read() 就是 内核从这个 TCP 接收区中读取数据，然后拷贝到用户态
-
-write() 就是 从用户态将数据拷贝到内核态，然后将数据写入到 TCP 发送区中，写进去后 write() 函数就返回了，什么时候发送数据出去并不会通知，具体发送时机看 TCP 的 Nagle 算法
-
-
-
-如果 TCP 发送区已满时，write() 会阻塞
-
-如果 TCP 接收区已满时，read() 会阻塞
-
-
-
-> ### close()
-
-**某一方主动调用 close() 函数是四次挥手的开始**
-
-处于主动关闭的一方， 调用 close() 会发送 FIN，进入 FIN_WAIT1 状态
-
-处于被动关闭的一方，在收到 FIN 后会回发一个 ACK，处于 CLOSE_WAIT 状态，然后数据处理完，调用 close() 后发送 FIN，处于 LAST_ACK 状态
-
-
-
-## 2、BIO
+## 1、BIO（阻塞 IO）
 
 BIO 是 同步阻塞 IO，它有两个阶段会存在阻塞
 
@@ -110,7 +32,7 @@ BIO 的特点就是用户进程在 **等待数据 和 拷贝数据** 两个阶�
 
 
 
-## 3、NIO
+## 2、NIO（非阻塞 IO）
 
 NIO 即 Non Blocking IO，同步非阻塞 IO
 
@@ -118,9 +40,7 @@ NIO 即 Non Blocking IO，同步非阻塞 IO
 
 在第一阶段，内核发现数据还没来，那么会返回一个 error 给用户进程，这样用户进程就会知道没有数据，不会死等
 
-后面用户进程再次调用 recv() 
-
-如果数据来了，那么内核会将数据从内核态拷贝到用户态，用户进程可以自取
+后面用户进程再次调用 recv() ，如果数据来了，那么内核会将数据从内核态拷贝到用户态，用户进程可以自取
 
 
 
@@ -131,7 +51,7 @@ NIO 即 Non Blocking IO，同步非阻塞 IO
 
 
 
-## 4、IO 多路复用
+## 3、IO 多路复用
 
 IO 多路复用模型比如 select，它能够同时处理多个 socket，将需要处理的 socket 交给用户进程
 
@@ -157,7 +77,7 @@ epoll 则是从头到尾都是 内核态控制 socket 列表，因此省去了 �
 
 
 
-## 5、AIO
+## 4、AIO（异步 IO，最终目标）
 
 AIO 是 异步 IO，既然是异步那自然是不会阻塞的
 
@@ -173,4 +93,4 @@ AIO 跟 NIO 共同点就是 在没有数据的时候都不会进行等待
 
 AIO 跟 NIO 区别就是 AIO 在有数据的时候也不会进行等待数据拷贝，数据拷贝完成是内核发送 signal 通知的，而 NIO 如果有数据则会等待数据拷贝完成然后获取
 
-即 AIO 是完全不存在阻塞的
+即 AIO 是完全不存在阻塞的，**它获取数据的时候类似内核的一种回调**

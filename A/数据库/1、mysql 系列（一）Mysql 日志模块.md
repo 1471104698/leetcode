@@ -14,15 +14,7 @@ undo log 类型有两种：
 - **update undo log：**将修改列的旧数据 copy 一份作为 undo log，
   - InnoDB 默认将 delete 当作 update，delete 只是修改 删除标志位，数据的真正删除是 由  purge（清除）线程执行的，即执行 delete 操作后数据行不会立即删除
 
-
-
-update undo log 存储在内存中的一个专门的 undo 表空间中，用于后续的 回滚 和 MVCC
-
 undo log 不会无限增加，当数据库现在的 ReadView 中的事务 id 都跟 该 undo log 中记录的事务 id 搭不上边，该 undo log 会被删除
-
-<img src="https://img-blog.csdnimg.cn/20190808004004673.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzQxNjUyODYz,size_16,color_FFFFFF,t_70" style="zoom:70%;" />
-
-
 
 
 
@@ -79,11 +71,19 @@ undo log 中有一个字段` db_trx_id` 记录修改当前数据的事务 id，�
 
 > ### redo log file 的结构
 
-redo log file  的大小是固定的，使用循环写的形式
+**redo log 使用循环写的方式**
 
-redo log file 有两个指针，check point 表示 buffer pool 脏页的起始位置，write pos 表示 新的 redo log 行写入的位置
+redo log 文件大小是固定的，假设配置用于 redo log file 文件大小为 4G，那么可以配置成为 4 个文件，分别为 0 - 3 号文件，每个文件大小为 1G，那么当 3 号文件写满时，会重新回到 0 号文件开始写
 
-相当于一个是读指针，一个是写指针，当 check point == write pos 时，表示日志满了，那么需要将 check point 后的数据刷盘，这样就又有空闲的空间了
+
+
+redo log file 有两个指针：
+
+- check point 表示 buffer pool 脏数据的起始位置，当宕机重启时就从这个位置开始恢复
+
+- write pos 表示 新的 redo log 记录行 写入的位置
+
+相当于一个是读指针，一个是写指针，当 check point == write pos 时，表示日志满了，那么需要将 check point 后的部分数据刷盘，然后留出空间继续写
 
 
 
@@ -91,110 +91,24 @@ redo log file 有两个指针，check point 表示 buffer pool 脏页的起始�
 
 
 
-> ### undo log 和 redo log 的关系
-
-具体看  https://www.cnblogs.com/xinysu/p/6555082.html 
-
-
-
-在修改前，是先生成 undo log，再修改值，再生成 redo log
-
-```java
-A.begin.
-B.记录A=1到undo log.	//修改前生辰 undo log 记录修改列的旧值
-C.修改A=3.			//修改
-D.记录A=3到redo log.	//修改后将修改的值记录到 redo log 中
-E.记录B=2到undo log.
-F.修改B=4.
-G.记录B=4到redo log.
-H.将redo log写入磁盘。
-I.commit
-```
-
-
-
-redo log 文件并不会关系哪个 log 属于哪个事务的，对应 log 的事务 id 也会被当作数据记录进 redo log file 中，基本所有的事务都共用一个 redo log file，因此 redo log 的内容可能如下：
-
-```java
-记录1: <trx1, insert …>	//事务1的 log
-记录2: <trx2, update …>	//事务2的 log
-记录3: <trx1, delete …>	//事务1的 log
-记录4: <trx3, update …>	//事务3的 log
-记录5: <trx2, insert …>	//事务2的 log
-```
-
-redo log 将 undo log 作为数据，一并写入到文件中，包含 undo log 操作的 redo log，看起来是这样的：
-
-```java
-记录1: <trx1, Undo log insert <undo_insert …>>	//修改前的列的 undo log，在 redo log 中不是用来回滚，而是用来连接上数据行的 回滚指针
-记录2: <trx1, insert …>							//修改
-记录3: <trx2, Undo log insert <undo_update …>>
-记录4: <trx2, update …>
-记录5: <trx3, Undo log insert <undo_delete …>>
-记录6: <trx3, delete …>
-```
-
-回滚的时候，redo log 并不会删除掉对应的 redo log 记录，即上面的 记录 2、4、6 都不会被删除
-
-这样的话，在后续如果使用 redo log 进行宕机恢复，这些回滚的数据不是会被重新执行吗？
-
-
-
-我们需要知道，回滚实际上也是数据修改，因此回滚的操作也会被记录到 redo log 中
-
-这样一个**已经完成回滚**的 redo log，如下：
-
-```java
-记录1: <trx1, Undo log insert <undo_insert …>>
-记录2: <trx1, insert A…>
-记录3: <trx1, Undo log insert <undo_update …>>
-记录4: <trx1, update B…>
-记录5: <trx1, Undo log insert <undo_delete …>>
-记录6: <trx1, delete C…>				
-记录7: <trx1, insert C>				//回滚，将删除的 C 插入回去
-记录8: <trx1, update B to old value>	//回滚，将修改后的 B 修改回旧值
-记录9: <trx1, delete A>				//回滚，将插入的 A 删除
-```
-
-因此存在 记录 7、8、9，在执行 redo log 恢复数据的时候，对于已经回滚的事务，redo log 会先执行 记录 2、4、6，后续再执行 记录 7、8、9 重新进行一次回滚
-
-
-
-> ### 为什么 undo log 需要落盘？
-
-由于 MVCC 使用的 undo log 是为了记录同段时间活跃的事务的可见性的，一旦所有事务都完毕，那么 undo log 对于 MVCC 来说就没有作用了，因此 undo log 只需要存储在内存中，数据行的回滚指针在没有事务的时候都是指向空的，这样的话表示 undo log 落盘不是为了 MVCC，那么为什么 undo log 还需落盘呢？
-
-```
-undo log 的落盘实际上是为了宕机恢复时对未提交事务进行回滚
-？？？这就有问题了，数据事务提交后才会找时间刷盘吗，为什么会在未提交前进行回滚？
-未提交事务存在两个方面
-1、这涉及到 redo log ，由于 redo log 文件大小是有限的，那么在 redo log 满了的时候，需要先将一些数据刷盘以此来空出空间，因此
-```
-
-
-
-
-
 ## 3、bin log
 
-具体看 https://www.cnblogs.com/xibuhaohao/p/10899586.html 
+
+
+[redo log 和 bin log（一）](https://www.cnblogs.com/xibuhaohao/p/10899586.html )
+
+[redo log bin log（二）](https://www.cnblogs.com/a-phper/p/10006417.html)
 
 
 
-bin log 全称为 binary log，即二进制文件
+bin log 全称为 binary log（二进制文件），数据都是二进制形式的
 
-这里先说下 **bin log 和 redo log 的区别**：
+**bin log 和 redo log 的区别**：
 
-- bin log 记录的是事务的每一条产生修改的 sql，查询 sql 不会记录；redo log 存储的是数据修改的脏页
-
-- bin log 是 mysql 层面的，所有存储引擎都有；redo log 是 InnoDB 独有的
-
-- bin log 不支持循环写，同样是追加的方式，但是一个文件满了立马就开一个新的文件写，不会覆盖以前的数据；redo log 是文件循环写
-
-bin log 跟 redo log 一样分为两部分：
-
-- 一部分是内存中的缓存 bin，事务执行产生修改的 sql，就添加一条 bin log 到缓存中
-- 一部分是磁盘中的 bin log 文件， commit 后会将缓存中的 bin log 刷盘
+- bin log 存储 事务过程中 产生数据库更新的 sql 语句（insert、update、delete），select 不会记录；redo log 存储的是数据修改的脏页
+  - 注意 bin log 在 InnoDB 中只有事务提交了才会刷盘，在 Mysiam 这种没有事务的那么不需要等到事务提交
+- bin log 是 server 层面的，所有存储引擎都有；redo log 是 InnoDB 独有的
+- bin log 使用的是“追加写” 的方式，一个文件满了换一个新的文件写，不会覆盖以前的数据（所以可以当作数据备份，当误删数据库文件时，如果存在备份，可以使用 binlog 备份文件恢复）；redo log 大小固定，使用 "循环写" 的方式
 
 
 
@@ -226,7 +140,7 @@ mysql 将 redo log 刷回磁盘的完整状态分为两阶段
 
 在第一阶段，只执行 redo log 的刷盘，然后在 redo log 中将该事务的状态设置为 prepare
 
-在第二阶段，执行 bin log 的刷盘，刷盘成功后，将 redo log 中该事务的状态设置为 commit，完成提交
+在第二阶段，执行 bin log 的刷盘，刷盘成功后，将 redo log 中该事务的状态设置为 commit，事务成功提交
 
 
 
@@ -234,11 +148,11 @@ mysql 将 redo log 刷回磁盘的完整状态分为两阶段
 
 看到这可能会疑惑：为什么一定要使用两阶段提交呢？如果不使用会发生什么事？
 
-假如没有两阶段提交，而是 redo log 和 bin log 的刷盘没有任何关系，是分开的
+假如不使用两阶段提交：
 
-1、master 执行完 update，记录 undo log，完成了 redo log 的刷盘，这时在 bin log 刷盘的时候，master 数据库宕机了
+1、master 事务提交后，完成了 redo log 的刷盘，这时在 bin log 刷盘的时候，master 数据库宕机了
 
-这就导致了 bin log 和 redo log 数据的不一致性，当 master 重启的时候，会将 redo log 的数据刷盘，而 slave 获取的是 bin log，而这个 bin log 没有记录新的数据，因此导致 master 和 slave 的数据不一致性
+这就导致了 bin log 和 redo log 数据的不一致性，当 master 重启的时候，会将 redo log 的数据刷盘，而 slave 获取的是 bin log，而这个 bin log 没有记录 redo log 中的新数据，因此导致 master 和 slave 的数据不一致性
 
 2、同理，如果是先对 bin log 刷盘，再对 redo log 刷盘，那么刷完 bin log 后，master 数据库宕机了，那么重启后使用 redo log 恢复，这时候 redo log 没有新数据，而 slave 获取的是 bin log，它有记录新数据，同样导致 master 和 slave 的数据不一致性
 
@@ -246,13 +160,14 @@ mysql 将 redo log 刷回磁盘的完整状态分为两阶段
 
 因此需要使用两阶段提交：
 
-它会给每个事务分配一个事务 id（xid），redo log 和 bin log 在将该事务刷盘时，都会跟着该事务的事务 xid
+Mysql 内部会将普通的事务当作一个 分布式事务 来处理，自动为每个事务分配一个唯一的 ID（XID），普通的事务 commit 被划分为 prepare 和 commit 两个阶段
 
-( 这个事务 id 实际上就是上面讲的隐藏字段的事务 id，只不过我们上面没提分布式事务 id )
+事务提交过程中发生宕机，数据库重启时，会顺序扫描 redo log 进行数据恢复，如果扫描到 redo log 标签为 prepare，那么就拿该 redo log 的 XID 去 binlog 中看 bin log 是否已经落盘，如果没有，那么该事务回滚（删除 redo log 和 bin log 数据），如果有，那么修改为 commit，并且将数据恢复
 
+将 redo log 和 bin log 按照状态详细拆分过程，如下：
 
+- redo log 已经刷盘，prepare 状态，但是 bin log 没有刷盘成功，那么将该事务已经刷盘成功的 redo log 和  未刷盘或者刷盘刷一半的 bin log 删除
+- redo log 已经刷盘，bin log 也刷盘
+  - redo log 事务状态已经从 prepare 修改为 commit，那么表示事务提交成功，不管了
+  - redo log 事务状态还没有修改为 commit，那么获取 bin log 的最后一个 xid 以及 redo log 中 prepare 状态的 xid，如果相同，那么意味着 bin log 也已经刷盘成功，将 redo log 的该事务修改为 commit；如果不同，那么将 redo log 和 bin log 多余的数据都删除 
 
-事务提交过程中，数据库宕机后重启存在以下情况：
-
-- redo log 已经刷盘，prepare 状态，但是 bin log 没有刷盘成功，那么将处于 prepare 状态的事务删除
-- redo log 已经刷盘，bin log 也刷盘，但是还没有记录此事务的 commit 状态，那么获取 bin log 的最后一个 xid 以及 redo log 中 prepare 状态的 xid，如果相同，那么意味着 bin log 也已经刷盘成功，所以才会有这个事务 id，将 redo log 的该事务修改为 commit，如果不同，那么就是上面的操作了

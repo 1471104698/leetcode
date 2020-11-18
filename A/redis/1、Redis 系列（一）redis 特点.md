@@ -47,11 +47,9 @@
 
 > redis 6.0 的多线程处理模式
 
-redis 6.0 为 socket 的读写 另开一组多线程进行处理
+redis 6.0 使用的 IO 多路复用模式类似 Reactor 的 多线程 IO 单线程业务处理
 
-多个线程 分摊 读取 各个 socket 的数据，然后将命令串行交给 执行命令的 单线程 处理
-
-当处理完成后，再使用多个线程将数据 写回 到各个 socket 中
+它使用一个 主 Reactor 来监听 socket 的建立，然后使用 socket IO 分摊到各个 从 Reactor 上，不过每个 从 Reactor 没有维护一个线程池，它们的 socket IO 自己处理，而业务逻辑则是交到同一个线程去处理，即 redis 的用户请求处理仍然是单线程的
 
 
 

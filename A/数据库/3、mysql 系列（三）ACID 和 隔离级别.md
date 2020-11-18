@@ -62,7 +62,7 @@ This(Consistency）does not guarantee correctness of the transaction in all ways
 
 
 
-## 2、丢失修改、脏读、不可重复读、幻读
+## 2、事务并发问题：丢失修改、脏读、不可重复读、幻读
 
 丢失修改：
 
@@ -177,5 +177,8 @@ This(Consistency）does not guarantee correctness of the transaction in all ways
 
 > ### 串行
 
-这个隔离级别就严重了，可以解决上述问题的任何问题，因为每次只允许一个事务执行，即是串行的，没啥用吧，在如今这个要求效率的时代，基本不会去用这种拖慢下来的东西
+这个隔离级别就严重了，可以解决上述问题的任何问题，因为每次**只允许一个事务执行，不允许并发事务**，即是串行的
 
+没啥用吧，在如今这个要求效率的时代，基本不会去用这种拖慢下来的东西
+
+**使用场景大概就是 在事务过程中不允许别的事务进行操作，避免任何事务并发问题**

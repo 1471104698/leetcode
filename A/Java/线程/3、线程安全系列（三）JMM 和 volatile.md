@@ -22,7 +22,7 @@ JMM 规定了 内存只要有两种：主存 和 工作内存
 
 上面说了，线程的工作内存也是 CPU cache，学习过 CPU 缓存一致性协议 MESI 就会知道， CPU 多核心 已经通过该协议保证了数据的一致性了，那么为什么还会需要 volatile 呢？
 
-因为 CPU 默认使用了 Store Buffers，它只能保证 单核 CPU 的可见性，保证多核 CPU 的可见性需要由 内存屏障 来保证，而 volatile 就是 自动添加 读 和 写 内存屏障
+因为 CPU 默认使用了 Store Buffers 和 无效队列，而 Store Buffers 只能保证 单核 CPU 的可见性，保证多核 CPU 的可见性需要由 内存屏障 来保证，而 volatile 就是 自动添加 读 和 写 内存屏障，同时 volatile 是 Java 语言层面的，它需要禁止编译器进行重排序，保证在它之前写的其他变量的可见性
 
 
 

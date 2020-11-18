@@ -1,43 +1,44 @@
 # 重载、重写、vtable、解析阶段之间的关系
 
-具体看： https://my.oschina.net/xiaolyuh/blog/3168216 
 
 
+[JVM 方法调用 -- OSCHINA 网站](https://my.oschina.net/xiaolyuh/blog/3168216)
 
-## 1、方法调用的字节码指令
+## 1、虚方法和非虚方法
 
-- `invokestatic`：表示当前调用静态方法。
-- `invokespecial`：表示当前调用实例构造器<init>()方法、private 方法 和 父类中的方法。
-- `invokevirtual`：表示当前调用某个虚方法，生成虚方法表。
-- `invokeinterface`：表示调用接口方法，生成接口方法表。
-- `invokedynamic`：先在运行时动态解析出调用点限定符所引用的方法，然后再执行该方法。
+**非虚方法：**在编译期间就可以确定调用的是哪个类的哪个具体方法的，调用哪个方法是唯一确定的，**一般情况下是因为方法无法被重写而存在唯一性**
 
-
-
-方法分为虚方法和非虚方法
-
-**非虚方法：**在编译期间就可以确定调用的是哪个类的哪个具体方法的，一般情况下是不能被继承的方法
-
-- 静态方法
+- static 方法
 - private 方法
 - final 方法
-- 构造方法
-
-这些在编译成字节码期间就完全可以确定调用的是哪个方法了，因为它们无法被继承和重写，像这样的方法直接通过常量池的符号引用就直接确定了，无需去查找是父类还是子类的方法，因此它只属于一个类的
+- <init> 构造方法
+- 通过 super 调用父类的方法（**这是个例外**，父类方法可以被重写，但是通过 super 就指明了是调用父类的方法，而不会是子类的方法，因此在编译期间是可以确定的，不需要虚方法表）
 
 
 
 **虚方法：**不能在编译期间确定的，因为可能会发生方法重写，所以不能具体确定调用的是哪个子类还是父类的方法
 
-- public 、protected、默认访问修饰符的方法
+- 除去非虚方法外都是虚方法
 
-对虚方法的调用会创建一张虚方法表，以此来实现方法重写调用
+对虚方法的调用会创建一张虚方法表来简化查找操作，以此来实现方法重写调用
 
 这种的不能在编译期间就确定调用的是谁的方法，因此需要 JVM 类加载的 解析阶段自己去根据符号引用查找 当前类以及父类的元数据判断调用的是谁的方法，然后再将符号引用转换为直接引用，这种的需要 JVM 去做的，所以被称作运行期解析
 
 
 
-## 2、方法重载
+## 2、方法调用的字节码指令
+
+- `invokestatic`：调用静态方法。
+- `invokespecial`：调用 <init>() 构造方法、private 方法 和 super 调用父类中的方法。
+- `invokevirtual`：一般情况下是调用虚方法，特殊情况是 final 是非虚方法，但是也是使用该指令。
+- `invokeinterface`：调用接口方法，并且对象的引用类型需要为接口，生成接口方法表。
+- `invokedynamic`：一般 lambda 表达式 或者 函数式接口
+
+
+
+
+
+## 3、确定方法重载的调用（编译器确定）
 
 方法重载指的是一个类中的多个方法名相同，而参数不同的情况
 
@@ -220,7 +221,7 @@ public class A {
 
 
 
-## 3、方法重写
+## 4、确定方法重写的调用（运行时确定)
 
 如下代表存在方法重载和方法重写
 
@@ -317,19 +318,19 @@ sayHello(int i)
 
 但是最终输出结果表明调用的并不是同一个方法，A 和 B 都调用了自己的方法
 
-不是不能确定调用的是子类还是父类的方法么？那么这个结果是怎么实现的？
-
-通过 JVM 解析阶段 + 虚方法表
+而真正的调用对象必须在运行时才知道，所以一般是在 JVM 解析 字节码指令时，获取真正调用的方法的字节码指令，并且解释执行，具体过程看下面内容
 
 
 
-## 4、解析阶段
+## 5、类加载 的 解析阶段
 
-具体看[JVM里的符号引用如何存储？](https://www.zhihu.com/question/30300585)
+[JVM里的符号引用如何存储？-- R 大](https://www.zhihu.com/question/30300585)
 
-​	[JVM 常量池解析](<https://blog.csdn.net/luanlouis/article/details/40301985?utm_medium=distribute.pc_relevant_t0.none-task-blog-BlogCommendFromMachineLearnPai2-1.edu_weight&depth_1-utm_source=distribute.pc_relevant_t0.none-task-blog-BlogCommendFromMachineLearnPai2-1.edu_weight>)
+[虚方法表存储的是什么？ R 大](https://www.zhihu.com/question/27459122/answer/36736246 )
 
-[虚方法表存储的是什么？]( https://www.zhihu.com/question/27459122/answer/36736246 )
+[JVM 常量池结构解析 -- CSDN](<https://blog.csdn.net/luanlouis/article/details/40301985?utm_medium=distribute.pc_relevant_t0.none-task-blog-BlogCommendFromMachineLearnPai2-1.edu_weight&depth_1-utm_source=distribute.pc_relevant_t0.none-task-blog-BlogCommendFromMachineLearnPai2-1.edu_weight>)
+
+[invoke virtual 和 虚方法表 解析 -- 简书](https://www.jianshu.com/p/fb7ce7584c05)
 
 
 
@@ -339,9 +340,11 @@ JVM 在类加载的时候会将 Class 各个部分解析为 JVM 的内部数据�
 
 在刚加载好一个类的时候， 常量池 和 每个方法的字节码（Code 属性）会被原样拷贝到内存中，也就是说还是处于 "符号引用" 的状态，等到真正被调用执行字节码指令的时候才会进行解析
 
+**Code 内部需要使用到常量池的符号引用**
 
 
-### 1、Code 属性的重要性
+
+### 1、Code 属性
 
 ```java
     Code:
@@ -383,29 +386,17 @@ JVM 执行程序实际上就是在执行各个方法中 Code属性的 指令
 
 
 
-### 2、方法重写：方法解析
-
-**首先我们需要先知道虚方法表：**
-
-虚方法表是一个存储 vtableEntry 结构体的数据，每个 vtableEntry 存储的是 Method*，
-
-虚方法表在解析之前就已经初始化好了，JVM 会将父类的虚方法表拷贝给子类，如果子类重写了父类的方法，那么将对应虚方法表位置的 vtableEntry  指向自己重写方法的 Method，如果是子类自己定义的，那么在虚方法表尾部接着创建新的 vtableEntry 节点，指向自己定义的 Method
-
-这意味着**子类和父类 的所有共有方法在虚方法表中的 偏移量（索引）是相同的**，这是多态实现的一个关键
-
-以下这张图就体现了：子类和父类的虚方法表的索引位置都是一致的
-
-![img](https://oscimg.oschina.net/oscnet/up-3eaf3361f273c0f758a8e772f56f3d885e0.png)
+### 2、常量池 解析
 
 
 
-**我们还需要知道 invokevirtual #11 的含义：**
+**invokevirtual #11 的含义：**
 
-invokevirtual 指的是调用某个方法，注意是调用，而不是声明某个方法，是执行某个方法的时候在内部又调用别的方法的指令
+invokevirtual 表示调用某个虚方法，JVM 在执行某个方法的时候在内部又调用别的方法
 
-后面的 #11 指的是调用的这个方法在常量池中的 符号引用 Methodref 结构体
+后面的 #11 指的是调用的这个方法在常量池中 tag = 10 位置的 Methodref 结构体
 
-下面是常量池的内容，可以看到 #1 #4 #8 #10 #11 全部都是 Methodref 结构体，并且注释对应的就是一个方法
+下面是常量池的内容，可以看到 #1 #4 #8 #10 #11 全部都是 Methodref 结构体
 
 ```java
 Constant pool:
@@ -424,51 +415,183 @@ Constant pool:
 
 
 
-Methodref 结构体包含了方法的字符串信息：所属的类 class_index、方法名 name_index、方法修饰符 descriptor_index
+Methodref 结构体包含了方法的字符串信息：
+
+```C++
+CONSTANT_Methodref_info {
+    u1 tag;						//字节码指令后面跟着的 #11， 这个 11 就是这个 tag
+    u2 class_index;             //指向常量池的其他数据结构，调用该方法的类
+    u2 name_and_type_index;     //指向常量池的其他数据结构，存储方法的方法名 和 方法描述符，方法描述符中存储着方法的 参数个数 以及 方法的访问修饰符 之类的
+}
+```
 
 ![img](https://img-blog.csdn.net/20141110150930996)
 
+以下是从 Methodref  中获取信息的 JVM 源码
 
+```C++
+func (i *InterpretedExecutionEngine) invokeVirtual(def *class.DefFile, frame *MethodStackFrame, codeAttr *class.CodeAttr) error {
+    twoByteNum := codeAttr.Code[frame.pc + 1 : frame.pc + 1 + 2]
+    frame.pc += 2
 
-JVM 通过 定位到常量池的 #11 获取 Methodref 结构体
+    var methodRefCpIndex uint16
+    err := binary.Read(bytes.NewBuffer(twoByteNum), binary.BigEndian, &methodRefCpIndex)
+    if nil != err {
+        return fmt.Errorf("failed to read method_ref_cp_index: %w", err)
+    }
 
-根据 Methodref 里面的 class_index 获取全类名然后根据全类名查找到对应类的元数据，然后再根据 name_index 获取方法名，根据方法名到 该类的 Klass 上查找 _methods 获取 方法元数据所在的 methodblock 结构体（存储一个方法的元数据，在 C++ 中叫做 methodblock，在 Java 中叫做 Method），然后将 methodblock 的指针引用（地址）拷贝到常量池的 #11 位置替换掉 Methodref，后续访问 #11 后就无需再去解析 Methodref，直接通过 methodblock 指针访问即可
+    // 取出引用的方法
+    methodRef := def.ConstPool[methodRefCpIndex].(*class.MethodRefConstInfo)
+    // 取出方法名
+    nameAndType := def.ConstPool[methodRef.NameAndTypeIndex].(*class.NameAndTypeConst)
+    methodName := def.ConstPool[nameAndType.NameIndex].(*class.Utf8InfoConst).String()
+    // 方法描述符
+    descriptor := def.ConstPool[nameAndType.DescIndex].(*class.Utf8InfoConst).String()
 
-（**这里有个问题，虽然 Methodref 存储的是父类的全类名，但是真正的调用应该是看当前对象，因此我感觉应该是获取调用的方法名，然后根据获取当前对象的元数据，查找是否存在这个方法，如果不存在，再去查找父类元数据，而不是直接去查找父类元数据，包括下面将常量池中 #11 替换，如果当前对象有 这个方法，应该替换的是当前对象的 Method**）
+    // 从 方法描述符中 计算参数的个数
+    argCount := class.ParseArgCount(descriptor)
 
-它会将该位置的 invokevirtual 指令修改为 invokevirtual_quick，表示这个指令已经解析过了，后续调用无需解析了
+    // 找到操作数栈中的引用, 此引用即为实际类型
+    // !!!如果有目标方法有参数, 则栈顶为参数而不是方法所在的实际对象，切记!!!
+    targetObjRef, _ := frame.opStack.GetObjectSkip(argCount)
+    targetDef := targetObjRef.Object.DefFile
 
-methodblock 结构体中记录了该方法在 vtable 中的索引位置 vtable index 以及 方法参数个数 size，将 invokevirtual 后面的 #11 替换为这两个值，比如原本的 指令是：
-
+    // 调用
+    return i.ExecuteWithFrame(targetDef, methodName, descriptor, frame, true)
+}
 ```
-[B6] [00 0b]
+
+
+
+
+
+JVM 通过 #11 获取到常量池中  tag = 11 的 Methodref 结构体
+
+确定调用的真正方法的时候，根据字节码指令，有两种情况：
+
+- 如果是 invoke special 和 invoke static，这种根据 Methodref 就可以唯一确定调用的方法了
+- 如果是 invoke  virtual  和 invoke  interface，那么就需要 Methodref 中的方法名、方法的修饰符 以及 根据操作数栈的栈顶元素的数据类型 来确定调用的是谁的方法
+
+
+
+这里需要讲一下，对于 invoke static 这样的说唯一确定调用方法 不是说直接就定位到方法所在的类的元数据，而是说不会出现不知道是调用的子类的 A() 还是 父类的 A()，static 是唯一确定的
+
+```java
+class B{
+	public static void h(){}
+}
+class A extends B{	
+    public static void main(String[] args){
+        A.h();
+    }
+}
 ```
 
-其中 [00] [0b] 这两个字节表示 #11
+*![image.png](https://pic.leetcode-cn.com/1605665023-fdxeBt-image.png)*
 
-解析后，得知 vtable index = 6， size = 1，那么替换后变成了
+可以看出，编译器在编译期间识别为了 A 的方法，但是 A 中并没有这个方法，该方法在 B 中，但是这个 h() 方法是唯一确定的，只有一个，最终必定是调用的 B 的 h()
 
+JVM 解析 #13 时，获取 A 的元数据，扫描 _methods，发现没有 h()，那么获取父类 B 的元数据，扫描 _methods，发现 h()，那么就调用 B 的 h()
+
+
+
+而像 invoke  virtual 这种的，由于 A 和 B 都有方法 h()，因此需要在运行期间根据 操作数栈的栈顶元素的数据类型 获取元数据，再扫描 虚方法表 获取真正调用的方法
+
+```java
+class B{
+	public void h(){}
+}
+class A extends B{	
+    @Override
+    public void h() {
+    }
+    
+    public static void main(String[] args){
+        B b = new A();
+        b.h();
+    }
+}
 ```
-[D6] [06 01]
+
+
+
+如果是 invoke special 和 invoke static：
+
+- 根据 Methodref 获取全类名，然后根据全类名查找到对应类的元数据
+
+- 在 Methodref 中获取方法名和方法描述符，根据 方法名和方法描述符 在当前类的 _methods 中查找目标方法的 methodblock（JVM 的 Method 对象），如果不存在，那么在父类的元数据中查找，层层往上，直到找到为止
+- 然后将 methodblock 指针（地址）拷贝到常量池的 #11 位置替换掉 Methodref
+
+如果是 invoke  virtual  和 invoke  interface：
+
+- 根据 操作数栈 的实际对象类型 获取元数据
+  - 注意，实际调用对象不一定是在操作数栈栈顶，因为方法如果存在参数，那么操作数栈栈顶就是存储参数值
+
+- 在 Methodref 中获取方法名和方法描述符，查找当前类的 虚方法表，根据 方法名和方法描述符 进行匹配出 methodblock 
+- 然后将 methodblock 指针（地址）拷贝到常量池的 #11 位置替换掉 Methodref
+
+
+
+**常量池 #11 位置的 Methodref 替换：**
+
+```java
+比如找到的 methodblock 指针是 0x45762300	//这里地址位置是倒序的
+那么常量池 #11 位置的 Methodref 结构会被替换为：
+[00 23 76 45]
+后续其他方法需要访问 #11 时就无需再去解析 Methodref，直接通过 该地址 得到 目标 Method 对象 即可
 ```
 
-两个字节，vtable index 和 size 各占一个字节
-
-这样的话，**经过解析后指令就变成了 invokevirtual_quick 6 1**
 
 
+**字节码指令 invokevirtual #11 替换**：
+
+当解析完毕后，JVM 会将 invokevirtual 指令修改为 invokevirtual_quick，表示这个指令已经解析过了，后续调用无需解析了
+
+同时还会**从 methodblock 结构体中获取到 在虚方法表的索引位置**
+
+然后将 #11 的 2B 替换成 虚方法表的下标 和 方法参数个数，后续执行该方法，到该指令时，直接根据 这个下标 到 操作数栈栈顶的对象类型的元数据的虚方法表上获取 methodblock 
+
+```java
+原本的字节码指令：invokevirtual #11
+invokevirtual [00 0b]	//[00] [0b] 这两个字节表示 #11
+    
+1、解析完成，将 invokevirtual 替换为 invokevirtual_quick
+invokevirtual_quick [00 0b]	
+
+2、从 methodblock 结构体中获取到方法在虚方法表中的位置为 vtable index = 6，并且已经知道方法参数个数 size = 1
+将 #11 替换为 虚方法表索引位置 和 方法参数个数
+invokevirtual_quick [06 01]	//两个字节，vtable index 和 size 各占一个字节
+    
+3、最终指令变成 invokevirtual_quick 6 1
+```
+
+
+
+**为什么不直接将 #11 替换为 methodblock 指针？**
+
+因为一个地址为 32bit - 4B，但 #11 只有 16bit - 2B，不够放
+
+但其实不需要替换的，可以直接根据 #11 找到常量池的 methodblock ，不过 JVM 想要这么设计而已，可能一些细节方面的这样的效率更高
 
 
 
 ### 3、字段解析
 
-这里说下解析阶段的字段解析，可以发现常量池中还存在 Fieldref，这个结构体跟 Methodref 类似，存储的变量的符号引用
+常量池中还存在 Fieldref，这个结构体跟 Methodref 类似，存储变量的符号引用
 
-![img](https://img-blog.csdn.net/20141021093957765)
+```C++
+CONSTANT_Fieldref_info {
+    u1 tag;					//标签，字节码指令对应的 #11 后面的 11
+    u2 class_index;             //指向常量池的其他数据结构，调用该变量的类
+    u2 name_and_type_index;     //指向常量池其他数据结构，存储该变量的变量名和数据类型
+}
+```
+
+  ![img](https://img-blog.csdn.net/20141021093957765)  
 
 
 
-有以下代码
+例子：
 
 ```java
 public class A {
@@ -601,9 +724,3 @@ class B extends A implements C{
     }
 }
 ```
-
-
-
-> private 变量
-
-父类的 private 变量会被子类继承，并且会分配在 OOP 对象体中，但是子类没有访问权限，相当于就是占了内存

@@ -10,9 +10,21 @@ JDK 1.8 的 JVM 内存空间如下：
 
 ## 1、程序计数器（线程私有）
 
+[程序计数器 -- 知乎 R 大 回答](https://www.zhihu.com/question/40598119/answer/87381512)
+
+[程序计数器存储的是什么？-- 简书](https://www.jianshu.com/p/77c882f47b29)
 
 
-程序计数器用来**记录下一条将要用来解释的 字节码指令的地址**，这里的字节码指令并不能直接让 CPU 执行，而是需要通过 JVM 解释器解释成二进制数才能被 CPU 执行
+
+程序计数器用来**记录下一条将要用来解释的 字节码指令的地址**，但是需要注意的是，**这个 所谓的地址并不是内存地址，而是字节码指令相对 Code 属性的偏移地址**（这个问题很大，在讲栈帧内容时会讲到）
+
+这意味着当我们**仅仅知道 程序计数器 的值的时候是无法直接定位到字节码指令的内存地址的，还需要知道方法的 Code 属性**
+
+*![image.png](https://pic.leetcode-cn.com/1605620624-inULpE-image.png)*
+
+
+
+字节码指令并不能直接让 CPU 执行，而是需要通过 JVM 解释器 解释成 二进制数 才能被 CPU 执行（这个问题也很大，下面会讲到）
 
 也许有这么一个疑问：直接让 JVM 解释器 按照字节码指令的顺序 解释下去就行了，为什么需要使用程序计数器来记录下一条执行的字节码指令，这不是显得多余吗？
 
@@ -36,9 +48,9 @@ JDK 1.8 的 JVM 内存空间如下：
 
 
 
-- 虚拟机栈存储的是调用当前线程调用的 Java 方法的栈帧，**栈帧中存储了入参地址、方法返回值地址、操作数栈、局部变量表**（内部细节具体看 [栈帧包含什么？](<https://blog.csdn.net/qian520ao/article/details/79118474>)）
+- 虚拟机栈存储的是调用当前线程调用的 Java 方法的栈帧
 
-- 本地方法栈存储的是调用 本地 native 方法（比如 C 函数）的栈帧，由于 C 函数不是 JVM 执行，所以**本地方法栈的栈帧中不存在局部变量表 和 操作数栈，只有入参地址 和 方法返回地址**
+- 本地方法栈存储的是调用 本地 native 方法（比如 C 函数）的栈帧
 
 位于栈顶的栈帧表示当前正在运行的方法
 
@@ -77,6 +89,8 @@ JDK 1.8 的 JVM 内存空间如下：
 +
 MetaSpace 大小
 ```
+
+
 
 
 
@@ -200,7 +214,7 @@ ByteBuffer heapBuffer = ByteBuffer.allocate(1024);
 //2、创建直接内存，内部调用 unsafe 的 allocateMemory()
 ByteBuffer directBuffer = ByteBuffer.allocateDirect(1024);
 
-//3、利用 unsafe 分配直接内存，返回直接内存的起始地址
+//3、利用 unsafe 分配直接内存，返回直接内存的起始地址，这个地址是虚拟地址
 long l = unsafe.allocateMemory(1024);
 //释放直接内存，由于直接内存不受 JVM 管理，所以需要手动释放内存
 unsafe.freeMemory(l);
@@ -289,7 +303,7 @@ ByteBuffer 分配则不会出现 机器卡死，但是会频繁出现 full GC
 
 导致内存泄漏的两个原因：
 
-- 直接内存使用完后没有手动释放内存
+- unsafe 分配直接内存，使用完后没有手动释放内存
 - ThreadLocal 使用完对象后没有调用 remove()（可能会存在内存泄漏，弱引用无法完全解决内存泄漏）
 - 集合类对象使用完某个对象后没有置 null，比如下面的例子
 
@@ -325,13 +339,56 @@ class stack {
 
 
 
-## 7、各种变量、常量 存储位置
+## 7、变量、常量 的存储位置
 
-**静态变量：** JDK 1.7 后从方法区中移除，放入到 Class 对象中，而 Class 对象存储在 堆中
+```java
+A a = new A()
+```
 
-**全局变量：**某个类实例化时进行初始化，是属于某个类实例的，因此跟类实例一样存储在堆中
+实际上上面的代码转换为：
 
-**局部变量：**属于某个方法的，方法的具象化是用栈帧来表示的，局部变量存储在局部变量表中，基础类型的局部变量（int）存储的是值，非基础类型的局部变量（User）存储的是引用，而局部变量表是栈帧的一部分
+```java
+int* addr = new A();	//分配内存创建对象，将分配的内存空间的起始地址返回
+A a = addr;				//将地址指针赋值给 a
+```
+
+这里我们需要明白一个细节：**我们所说的变量，是指 引用类型 a 指针，还是 new A() 对象呢？**
+
+
+
+实际上我们平时讲的 静态变量、全局变量、局部变量 都是在讲这个 a 指针的作用域，而不是在讲 new A() 对象
+
+因为无论是 静态变量、全局变量 还是 局部变量，它们指向的 new A() 对象都是存储在堆中的
+
+真正体现 new A() 对象的作用域的是 a 指针
+
+- 在 局部变量表中存储的就是 a 指针，而不会去存储 new A() 对象
+
+- 在 Class 对象中存储的也是 静态的 a 指针
+
+- 在 OOP 对象体中存储的是也是 a 指针
+
+
+
+```java
+public class Main{
+	static A a = new A();
+	B b = new B();
+	public void h(){
+		C c = new C();
+	}
+}
+```
+
+上面定义了三种变量：静态变量 a、成员变量 b、局部变量 c
+
+new A()、new B()、new C() 对象都是存储在堆中的
+
+a 指针 在 JDK 6 的时候存储在方法区，在 JDK 7 时转移到 Class 对象中
+
+b 指针 存储在 OOP 对象体中
+
+c 指针 存储在 局部变量表中
 
 
 
@@ -348,10 +405,9 @@ public class A{
 }
 ```
 
-javap -v 后如下：
+字节码指令如下：
 
 ```java
-//该字节码描述的是 A 的构造方法 ，即如果调用 new A()，那么初始化的变量如下，由于 l 不是 OOP 对象，所以不会在这里初始化
 public cur.A();
     descriptor: ()V
     flags: ACC_PUBLIC
@@ -361,20 +417,13 @@ public cur.A();
          1: invokespecial #1                  // Method java/lang/Object."<init>":()V
          4: aload_0
          5: ldc           #2                  // String abc 
-             		//需要先将 符号引用 #2 转换为直接引用
-             					1.1、执行 s = "abc"，ldc 指令，如果常量池没有，则在堆中创建 "abc"，将引用放入常量池
          7: putfield      #3                  // Field s:Ljava/lang/String;
-             					1.2、将上面 lac 返回的引用赋值给 s
         10: aload_0
         11: new           #4                  // class java/lang/String
-            					2.1、执行 s1 = new String("abc") 中的第一步，创建 String 的 OOP 对象
         14: dup
         15: ldc           #2                  // String abc
-            					2.2、执行 ldc 执行，这里获取的是上面 ldc 存入的引用
         17: invokespecial #5                  // Method java/lang/String."<init>":(Ljava/lang/String;)V
-            					2.3、执行 new String("abc") ，调用构造方法
         20: putfield      #6                  // Field s1:Ljava/lang/String;
-            					2.4、将 OOP 对象赋值给 s1
         23: aload_0
         24: ldc2_w        #7                  // double 123.00987d
         27: putfield      #9                  // Field d:D
@@ -390,29 +439,12 @@ public cur.A();
 
 final 和 static final 修饰的变量在编译时期产生的字节码 与普通的变量没有区别（虽然这里看不出 static final，但实际上一样的）
 
-意味着是在编译阶段就保证了 final 的不变性，即通过各个代码判断是否被发生改变
+意味着只是**在编译阶段就保证了 final 的不变性**，即通过各个代码判断是否被发生改变
 
-如果发生了改变，那么编译就不通过，而在后续编译完成的 字节码就是当作普通的变量来对待
+如果发生了改变，那么编译就不通过，而**在运行时是当作普通的变量来对待**
 
-所以，被 final 修饰的变量，该存哪还是存哪，final 就存储在堆的 OOP 对象中，static final 就存储在 堆中的 Class 对象中
+所以，被 final 修饰的变量，该存哪还是存哪
 
+final 就存储在堆的 OOP 对象中
 
-
-
-
-## 8、引用指针 存储的位置
-
-```java
-public class Main{
-	A a = new A();
-	public void h(){
-		B b = new B();
-	}
-}
-```
-
-有两个引用类型指针 a 和 b
-
-a 指向的是成员变量，是属于整个 OOP 对象的，不属于任何一个 栈帧，因此不会存储在 虚拟方法栈中，所以跟 OOP 对象一样存储在堆中
-
-b 是属于方法栈的，所以它存储在栈中
+static final 就存储在 堆中的 Class 对象中

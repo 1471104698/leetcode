@@ -36,9 +36,8 @@ Error 讲究的是 JVM 层面的错误，比如 NotClassDefFoundClass、OOM
 
 ## 3、throw 和 throws
 
-throw 是在方法内部的，表示抛出一个异常，可以位于方法的任意一个位置
-
-throws 是位于方法声明上的，对于一些非运行时异常，如果没有进行 try-catch，那么就必须进行 throws
+- throw： 在方法内部使用，可以在任何一个地方使用（当然是在 return 之前），抛出的是一个**异常对象**，new Exception()
+- throws：声明在方法上，表示该方法产生 **非运行时异常**，没有 catch 而是抛出了异常，那么在方法上声明抛出的**异常类型**
 
 
 
@@ -58,31 +57,116 @@ public class A{
 }
 ```
 
-我们可以根据对某一特定的情况进行 throw
+
+
+异常的产生有两种：
+
+- 1）由于代码问题产生的 运行时异常 RuntimeException
+- 2）方法自己 throws 抛出的异常
+  - 2.1）throws 抛出 运行时异常 RuntimeException
+  - 2.2）throws 抛出 非运行时异常
+
+我们调用 sleep()、wait() 时需要处理 InterruptedException 就是因为这几个方法内部都抛出了 这个 非运行时异常
+
+
+
+当方法调用 throw 抛出运行时异常时，方法上不需要声明 throw 异常类型，并且调用该方法的方法也不需要强制 catch 异常
 
 ```java
-public void h throw ArrayIndexOutOfBoundsException(int[] arr, int i){
-    if(i < 0){
-        throw new ArrayIndexOutOfBoundsException("索引越界");
+public class A {
+    public static void h (int i){
+        if(i < 0){
+            throw new ArrayIndexOutOfBoundsException("运行时异常：索引越界");
+        }
+        return;
     }
-    //do something
+    public static void main(String[] args)  {
+        //不需要强制处理异常
+        h(-1);
+    }
 }
 ```
 
 
 
-使用 throw 可以我们自己受控的在指定位置指定情况下抛出某个指定的异常，并且指定异常的错误信息
+当方法调用 throw 抛出非运行时异常，方法上需要声明 throw 异常类型，并且调用该方法的方法需要强制处理异常：继续往上抛 或者 try-catch 
 
-需要注意的是，**throw 后同时还需要在 方法上添加 throws，即使用了 throw 同时也必须使用 throws**
+```java
+public class A {
+    public static void h (int i) throws InterruptedException {
+        if(i < 0){
+            throw new InterruptedException("中断异常");
+        }
+    }
+    /*
+    可以选择 继续往上 throw 或者 try-catch
+    这里选择 throw，不过在 main() 这里往上抛就到达 JVM 层面了，一旦任何异常抛出到 JVM，那么主线程就会终止
+    													（注意只是主线程，其他线程并不会受到影响）
+    对于子线程 Thread 来说，run() 它的生命周期，如果 Thread 的异常抛出到 run()，那么线程终止
+    */
+    public static void main(String[] args) throws InterruptedException {
+        h(-1);
+        //由于在 h() 抛出了异常，而 main() 没有进行处理，所以主线程终止，不会执行下面的输出语句
+        System.out.println("main");
+    }
+}
+```
+
+
+
+深层级的测试：
+
+```java
+public class A {
+    
+    public static void h (int i) throws InterruptedException {
+        if(i < 0){
+            throw new InterruptedException("中断异常");
+        }
+    }
+    
+    //调用 h()，这里不处理 h() 的异常，而是抛出异常
+    public static void h1() throws InterruptedException {
+        h(-1);
+        System.out.println("h1");
+    }
+
+    public static void main(String[] args) {
+        try {
+            //调用 h1()，这里处理 h() -> h1() 抛出的异常
+            h1();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.out.println("main");
+    }
+}
+```
+
+输出：
+
+```java
+java.lang.InterruptedException: 中断异常
+	at cur.A.h(A.java:31)
+	at cur.A.h1(A.java:35)
+	at cur.A.main(A.java:41)
+main
+```
+
+可以看出，由于 h1() 没有处理异常，所以不会继续往下执行，导致没有输出 "h1"
+
+而 main() 捕获了异常，所以不会继续往上抛，所以会继续往下执行代码，输出 "main"
 
 
 
 ## 4、try-catch-finally、return 的执行时机
 
-> ### finally 代码块什么时候不会执行
+> ### finally 代码块 什么情况下 才不会执行
 
 - 在 try 代码块前就进行 return
 - 在 try 代码块中有 System.exit(0)，这个代码是退出 JVM 的，JVM 退出了，肯定就不能执行了
+
+由此看来，**只要执行了 try，那么必定会执行 finally，即使 try 中抛出了异常，那么 finally 也会执行**
 
 
 
@@ -181,7 +265,7 @@ finally
 
 
 
-**4、try 有 return ，finally 没有 return, finally 修饰 try return 的值**
+**4、try 有 return ，finally 没有 return, finally 修改 try return 的值**
 
 ```java
 public class A{
@@ -233,6 +317,7 @@ public class A{
     }
     private static int h(){
         try {
+            //发生异常
             int i = 1 / 0;
             return 1;
         }catch (Exception e){
@@ -241,7 +326,7 @@ public class A{
         }finally {
 			//return 2;
         }
-        return 3;
+        return 3;	//外层 return 优先级最低，如果 finally  有 return，外层不能有 return，否则编译出错
     }
 }
 ```
@@ -255,24 +340,30 @@ java.lang.ArithmeticException: / by zero
 3
 ```
 
-即如果 try 在没有 return 前发生了异常，并且进行了 catch，那么就不会执行 try 的 return，这时 return 有几种情况了：
+即如果 try 执行过程中发生了异常，那么就不会执行 try 的 return，这时 return 有几种情况了：
 
 - finally 中没有 return
   - catch 中没有 return，那么就会执行 外面的 return
   - catch 中有 return，那么就会执行 catch 的 return
 - finally中有 return
-  - catch 中有 return，先执行 catch 的 return，然后再执行 finally 的 return
+  - catch 中有 return，先执行 catch 的 return，然后再执行 finally 的 return，最终 finally 覆盖 catch 的 return 
   - catch 中没有 return，那么直接执行 finally 的 return,不会执行外面的 return
 
 
 
+> #### 总结
 
+return 的优先级：finally return > 【try / catch】return  > 外层 return 
 
-综上，finally 是负责断后的，即无论是 try 正常执行 还是 发生异常后 catch ，finally 都是在最后执行
+**finally 是负责断后的**，当 finally 存在 return 时，那么最终返回的结果是 finally return 的值
 
-并且 return 最后是 finally 的 return 有效，但是 try 和 catch 的也会执行，不过不会返回
+当 try - catch 中存在 return 时，在执行 finally 的 return 前会先执行它们的 return，正常情况下执行 try，异常情况下执行 catch
 
-外面的 return 能够执行的必要条件就是 finally 没有 return，并且 try 正常执行的情况下没有 return，异常情况下 catch 中没有 return
+而外层的 return 的出现情况：
+
+- 如果 finally 存在 return，那么 外层 return 不能出现
+- 如果同时存在 try-catch，那么如果 try-catch 都存在 return，那么 外层 return 不能出现，因为不论是正常还是异常，都不会执行到外层的 return；如果 try-catch 存在一个没有 return，那么 外层 return 可以出现，因为存在一种情况会执行到 外层return
+- 如果只存在 try，不存在 catch，那么如果 try 存在 return，那么 外层 return 不能出现
 
 
 

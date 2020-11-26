@@ -2,7 +2,9 @@
 
 ## 1、内部的数据结构
 
-> ### JDK 7
+### JDK 7
+
+
 
 JDK 7 使用 分段 Segment + ReentrantLock + 链表 实现
 
@@ -21,34 +23,26 @@ ConcurrentHashMap 将原本维护的一个 大 table 分割为多个 小 table
 
 
 
-Segment 数据结构
-
-其中 table 使用 volatile 修饰，保证扩容可见性
+Segment 和 HashEntry 数据结构
 
 ```java
 static final class Segment<K,V> extends ReentrantLock {
-       //使用 volatile 修饰，保证扩容对其他线程可见
-       volatile HashEntry<K,V>[] table;
-       //元素个数
-       int count;
-       //
-       int modCount;
-       //阈值和加载因子，用于每个 Segment 上面的 HashEntry 扩容
-       int threshold;
-       final float loadFactor;
+    //使用 volatile 修饰，保证扩容可见性
+    volatile HashEntry<K,V>[] table;
+    int count;
+    int modCount;
+    int threshold;
+    final float loadFactor;
 }
-```
 
-
-
+/*
 HashEntry 数据结构（注意：在 JDK 6 中的 next 才是 final 修饰的，JDK 7 和 JDK 8 都修改为 volatile 了）
 
 value 和 next 使用 voaltile 修饰，保证可见性
-
-```java
+*/
 static final class HashEntry<K,V> {
-    final int hash;
-    final K key;
+    int hash;
+    K key;
     volatile V value;
     volatile HashEntry<K,V> next;
 
@@ -58,11 +52,14 @@ static final class HashEntry<K,V> {
         this.value = value;
         this.next = next;
     }
+}
 ```
 
 
 
-> ### JDK 8
+### JDK 8
+
+
 
 JDK 8 回归了 一个 table 的时代，并且相比 JDK 7 缩小了锁的粒度
 
@@ -76,8 +73,8 @@ value 和 next 使用 volatile 修饰，保证修改可见性
 volatile Node<K,V>[] table;
 
 static class Node<K,V> implements Map.Entry<K,V> {
-    final int hash;
-    final K key;
+    int hash;
+    K key;
     volatile V val;
     volatile Node<K,V> next;
 
@@ -109,7 +106,9 @@ JDK 8 使用 sync + CAS + 链表 + 红黑树 实现，锁的粒度减小，hash 
 
 ## 2、get()
 
-> ### JDK 7
+### JDK 7
+
+
 
 无需加锁，hash 定位到对应 Segment 上 table 中的槽位
 
@@ -136,7 +135,9 @@ V get(Object key, int hash) {
 
 
 
-> ### JDK 8
+### JDK 8
+
+
 
 同样无需加锁，先定位到对应的槽位
 
@@ -154,12 +155,19 @@ public V get(Object key) {
             if ((ek = e.key) == key || (ek != null && key.equals(ek)))
                 return e.val;   // 如果是，就返回
         }
-        else if (eh < 0)   // 如果小于零，说明此节点是红黑树 
+        /*
+            这里当 eh < 0 时，表示是 TreeBin 或者 扩容节点 ForwardingNode ，
+            利用多态直接调用 find() 来获取，屏蔽调用细节
+        */
+        else if (eh < 0){
             return (p = e.find(h, key)) != null ? p.val : null;
+        }
+        //链表
         while ((e = e.next) != null) {
-            // 开始循环 查找
             if (e.hash == h &&
-                ((ek = e.key) == key || (ek != null && key.equals(ek))))
+                ((ek = e.key) == key || (ek != null && key.equals(ek)))){
+                
+            }
                 return e.val;
         }
     }
@@ -180,7 +188,9 @@ public V get(Object key) {
 
 ## 3、put()
 
-> ### JDK 7
+### JDK 7
+
+
 
 hash 定位到某个 Segment，然后再调用 Segment 的 put()
 
@@ -209,8 +219,14 @@ public V put(K key, V value) {
     return s.put(key, hash, value, false);
 }
 
+/*
+分段锁 Segment 的 put() 方法
+*/
 final V put(K key, int hash, V value, boolean onlyIfAbsent) {
-    //尝试 CAS 加锁，如果失败则自旋 while(!tryLock()) 直到获取锁成功
+    /*
+    分段 Segment 调用 tryLock() CAS 加锁
+    如果第一次调用 tryLock() CAS 失败，那么调用 scanAndLockForPut() 进行 自旋 CAS 加锁
+    */
     HashEntry<K,V> node = tryLock() ? null : scanAndLockForPut(key, hash, value);
     V oldValue;
     try {
@@ -218,16 +234,16 @@ final V put(K key, int hash, V value, boolean onlyIfAbsent) {
         int index = (tab.length - 1) & hash;
         //链表头节点 first
         HashEntry<K,V> first = entryAt(tab, index);
-        //遍历链表
+        //遍历该槽位上的链表
         for (HashEntry<K,V> e = first;;) {
+            //1、遍历链表
             if (e != null) {
                 K k;
-                //遇到相同的 Node
+                //该槽位的链表上已经存在 key、hash 相同的节点，那么替换旧值后 break
                 if ((k = e.key) == key ||
                     (e.hash == hash && key.equals(k))) {
                     oldValue = e.value;
                     if (!onlyIfAbsent) {
-                        //旧值替换
                         e.value = value;
                         ++modCount;
                     }
@@ -235,19 +251,39 @@ final V put(K key, int hash, V value, boolean onlyIfAbsent) {
                 }
                 e = e.next;
             }
+            //2、链表遍历完毕，e == null，待插入节点 node 不在链表上
             else {
-                if (node != null)
+                //node 不为空，那么 node.next = first
+                if (node != null){
                     node.setNext(first);
-                else
-                    //创建一个新节点，插入到链表的头部作为头节点，即头插法
+                }
+                else{
+                    //node 为空，那么新建节点，并将 node.next = first
                     node = new HashEntry<K,V>(hash, key, value, first);
+                }
+				/*
+				需要注意的是，上面 if-else 做的都是完成 node.next = first
+				使用的是头插法，但没有将 tab[index] = node，即槽位链表头 tab[index] 还是指向 first
+				即现在是
+					tab[index]
+								->>>	first
+					node
+					
+				我们还需要一步将 tab[index] 指向 node ，使得 node 作为链表头
+				
+					tab[index] -> node -> first
+					
+				*/     
+                
+                //进行扩容判断，如果需要扩容顺便将 node 传入，因为它还没有跟 tab[index] 形成引用关系，扩容后再进行关联
                 int c = count + 1;
-                //扩容判断：判断是否超出阈值，如果超出那么在 rehash() 内进行扩容
-                if (c > threshold && tab.length < MAXIMUM_CAPACITY)
+                if (c > threshold && tab.length < MAXIMUM_CAPACITY){
                     rehash(node);
-                else
-                    //将 table[i] 指向 node 代替 first 作为头节点
+                }
+                else{
+                    //不需要扩容，直接将 tab[index] 指向 node，使得 node 作为链表头
                     setEntryAt(tab, index, node);
+                }
                 ++modCount;
                 count = c;
                 oldValue = null;
@@ -255,6 +291,7 @@ final V put(K key, int hash, V value, boolean onlyIfAbsent) {
             }
         }
     } finally {
+        //解锁
         unlock();
     }
     return oldValue;
@@ -263,7 +300,9 @@ final V put(K key, int hash, V value, boolean onlyIfAbsent) {
 
 
 
-> ### JDK 8
+### JDK 8
+
+
 
 一次 hash 定位到对应的槽位
 
@@ -294,26 +333,27 @@ final V putVal(K key, V value, boolean onlyIfAbsent) {
         if (tab == null || (n = tab.length) == 0)
             tab = initTable();
         /*
-        5.如果对应key的哈希值上对应table数组下标的位置没有node
-        则通过 CAS 将节点插入 table[i] 中作为头节点
-        如果插入成功，break
-        插入失败，进入下一轮循环
+        5. tab[i] 为空，那么 进行一次 CAS 将 node 作为头节点
+        	CAS 成功返回
+        	CAS 失败进入下次循环
         */
         else if ((f = tabAt(tab, i = (n - 1) & hash)) == null) {
             if (casTabAt(tab, i, null, new Node<K,V>(hash, key, value, null)))
                 break;                   
         }
-        //6、如果table正在扩容，则得到扩容后的table，然后再重新开始一个循环
-        else if ((fh = f.hash) == MOVED)
+        //6、tab[i] 不为空，但是 table 正在扩容，那么调用 helpTransfer() 协助扩容，并且得到扩容后的 table
+        else if ((fh = f.hash) == MOVED){
             tab = helpTransfer(tab, f);
-        else {
-            //7.到这里说明找到了key hash后对应的table，并且table上有其他node的存在
-            V oldVal = null;
+        }
+        //7. tab[i] 不为空，并且不在扩容状态
+        else {	
+            
             /*
             8、将 槽位头节点 f 加上同步锁，防止并发出现的问题
             如果线程 put、remove 操作的也是这个 table[i] 的时候会进行阻塞
             */
             synchronized (f) {
+            	V oldVal = null;
                 /*
                 9.使用 CAS 确认槽位上的节点是否是我们要的 node
                 	如果不是的话则这个 table[i] 的头节点被修改，锁住的 f 是释放了的，因此直接释放锁进入下一个循环
@@ -358,7 +398,7 @@ final V putVal(K key, V value, boolean onlyIfAbsent) {
             }
         }
     }
-    //20.元素个数 +1
+    //20.元素个数 +1，在上面已经释放锁了，即这里的 addCount() 调用是无锁状态了
     addCount(1);
     return null;
 }
@@ -416,159 +456,13 @@ JDK 7 的扩容方法为 rehash()，JDK 8 的扩容方法为 transfer()，它是
 
 
 
-## 4、remove()
-
-> ### JDK 7
-
-JDK 7 的方法很简答，定位到对应的 Segment，然后再获取锁，再定位到对应的槽位上
-
-遍历链表，判断 key 和 hash，如果一致则将 pre.next = e.next，跳过删除节点
-
-删除完节点后进行 c-- 和 modCount++
-
-```java
-final V remove(Object key, int hash, Object value) {
-    //CAS 获取锁
-    if (!tryLock())
-        scanAndLock(key, hash);
-    V oldValue = null;
-    try {
-        HashEntry<K,V>[] tab = table;
-        //槽位
-        int index = (tab.length - 1) & hash;
-        //头节点
-        HashEntry<K,V> e = entryAt(tab, index);
-        //作为前驱节点指针
-        HashEntry<K,V> pred = null;
-        while (e != null) {
-            K k;
-            HashEntry<K,V> next = e.next;
-            if ((k = e.key) == key ||
-                (e.hash == hash && key.equals(k))) {
-                V v = e.value;
-                //找到删除节点
-                if (value == null || value == v || value.equals(v)) {
-                    //如果前驱节点为空，表示删除的是头节点，那么将 next 设置为头节点
-                    if (pred == null)
-                        setEntryAt(tab, index, next);
-                    else
-                        //pre.next = e.next 跳过删除节点
-                        pred.setNext(next);
-                    ++modCount;
-                    --count;
-                    oldValue = v;
-                }
-                break;
-            }
-            pred = e;
-            e = next;
-        }
-    } finally {
-        unlock();
-    }
-    return oldValue;
-}
-```
 
 
+## 4、size()
 
-> ### JDK 8
-
-JDK 8 的 remove() 和 put() 方法 差不多，基本没什么变化
-
-定位到槽位，判断头节点 f 是否为空，如果为空直接返回
-
-加锁 f，等到争夺到锁的时候，进行 CAS 判断 tab[i] 和 f 是否相同，如果不相同，那么释放锁进入下一轮循环（跟 put() 原因一样）
-
-判断是否是红黑树，如果是则调用红黑树的删除方法
-
-遍历链表，判断 key 和 value，如果存在，那么直接 pre.next = e.next，跳过删除节点
-
-```java
-final V replaceNode(Object key, V value, Object cv) {
-    int hash = spread(key.hashCode());
-    for (Node<K,V>[] tab = table;;) {
-        Node<K,V> f; int n, i, fh;
-        if (tab == null || (n = tab.length) == 0 ||
-            //获取头节点
-            (f = tabAt(tab, i = (n - 1) & hash)) == null)
-            break;
-        else if ((fh = f.hash) == MOVED)
-            tab = helpTransfer(tab, f);
-        else {
-            V oldVal = null;
-            boolean validated = false;
-            //加锁
-            synchronized (f) {
-                //CAS 判断头节点是否发生改变
-                if (tabAt(tab, i) == f) {
-                    if (fh >= 0) {
-                        validated = true;
-                        //遍历链表
-                        for (Node<K,V> e = f, pred = null;;) {
-                            K ek;
-                            //找到了删除节点
-                            if (e.hash == hash &&
-                                ((ek = e.key) == key ||
-                                 (ek != null && key.equals(ek)))) {
-                                V ev = e.val;
-                                if (cv == null || cv == ev ||
-                                    (ev != null && cv.equals(ev))) {
-                                    oldVal = ev;
-                                    if (value != null)
-                                        //将值置空
-                                        e.val = value;
-                                    else if (pred != null)
-                                        //跳过删除节点
-                                        pred.next = e.next;
-                                    else
-                                        //没有前驱节点，即是头节点，那么将 next 节点设置为头节点
-                                        setTabAt(tab, i, e.next);
-                                }
-                                break;
-                            }
-                            pred = e;
-                            if ((e = e.next) == null)
-                                break;
-                        }
-                    }
-                    else if (f instanceof TreeBin) {
-                        //xxxx
-                    }
-                }
-            }
-            if (validated) {
-                if (oldVal != null) {
-                    if (value == null)
-                        //节点个数 -1
-                        addCount(-1L, -1);
-                    return oldVal;
-                }
-                break;
-            }
-        }
-    }
-    return null;
-}
-```
+### JDK 7
 
 
-
-> ### 改变
-
-JDK 7 的 remove() 平平无奇，就是直接定位，获取锁，然后遍历链表找到对应节点
-
-找到后，如果是头节点，那么将 next 节点设置为头节点，如果不是则跳过删除节点，然后 c--
-
-
-
-JDK 8 的 remove() 实现跟 put() 基本一致，先判断头节点 f 是否为空，不为空则加锁，再 CAS 判断 f 是否发生改变，后面的操作跟 JDK 7 遍历链表的基本一样，在方法最后调用 addCount(-1) 将节点个数 -1
-
-
-
-## 5、size()
-
-> ### JDK 7
 
 JDK 7 的节点都分散在各个 Segment 中，因此所有节点的个数需要统计所有的 Segment 中的 普通 int 变量 c
 
@@ -640,7 +534,9 @@ public int size() {
 
 
 
-> ### JDK 8
+### JDK 8
+
+
 
 JDK 8 的 size() 有点复杂，一步步分析
 
@@ -683,9 +579,9 @@ final long sumCount() {
 
 
 
-这个 baseCount 和 CounterCell 数组 是什么？
+baseCount 和 CounterCell 数组都是用来解决并发情况下 计算 node 节点个数的
 
-baseCount 和 CounterCell 数组很容易理解，而 CounterCell 这个类内部只有一个 long 型变量：value
+CounterCell 内部只有一个 long 型变量：value
 
 ```java
 private volatile long baseCount;
@@ -699,7 +595,7 @@ private volatile CounterCell[] counterCells;
 
 
 
-它们的值是在哪里改变的？
+**它们的值是在哪里改变的？**
 
 这要追溯到 addCount()，这个方法就是对 baseCount 和 CounterCell 数组进行操作的
 
@@ -717,7 +613,7 @@ private final void addCount(long x, int check) {
         进到这里面的逻辑上 as != null 或者 as == null && 对 baseCount 进行一次 CAS 失败了
         这里 if 进入条件是 as == null 或者 
         	找到当前线程某个值 与 as.len - 1 进行 hash，定位到一个 CounterCell，对它 进行一次 CAS +1 失败了
-        
+
         */
         if (as == null || (m = as.length - 1) < 0 ||
             //ThreadLocalRandom.getProbe()：探针哈希值，初始值为 0，即第一次尝试 0 号位置的 CounterCell
@@ -730,79 +626,81 @@ private final void addCount(long x, int check) {
         }
         if (check <= 1)
             return;
+        //计算节点个数 s，用于下面的扩容判断
         s = sumCount();
     }
     //扩容判断
     if (check >= 0) {
-		//xxxx
+        //上面计算的 s >=sizeCtl 即容量达到扩容阈值，需要扩容
+        while (s >= (long)(sc = sizeCtl) && (tab = table) != null &&
+               (n = tab.length) < MAXIMUM_CAPACITY) {
+            //扩容
+            transfer(tab, null);
+        }
     }
 }
 ```
 
 
 
-上面当对 baseCount 和 线程的某个值 ThreadLocalRandom.getProbe() & (as.len - 1) 位置的 CounterCell 进行 CAS 都失败了的时候，那么就会调用 fullAddCount()
+上面当对 baseCount 和 0 号位置的 CounterCell 进行 CAS 都失败了的时候，那么就会调用 fullAddCount()
 
 ```java
-    private final void fullAddCount(long x, boolean wasUncontended) {
-        int h;
-        //如果探针哈希值为 0，那么调用 localInit() 进行初始化，转变成别的值
-        if ((h = ThreadLocalRandom.getProbe()) == 0) {
-            ThreadLocalRandom.localInit();      // force initialization
-            h = ThreadLocalRandom.getProbe();
-            wasUncontended = true;
-        }
-        
-        boolean collide = false;                // True if last slot nonempty
-        for (;;) {
-            CounterCell[] as; CounterCell a; int n; long v;
-            if ((as = counterCells) != null && (n = as.length) > 0) {
-                /*
-                这里 a = as[h & (len - 1)]，跟前面进行 CAS 尝试的 CounterCell 是同一个
-                如果 a == null，那么创建一个
-                */
-                if ((a = as[(n - 1) & h]) == null) {
-                    if (cellsBusy == 0) {            // Try to attach new Cell
-                        CounterCell r = new CounterCell(x); // Optimistic create
-                        //后续都是对这个 a 进行 CAS +1，直到成功为止
-                        if (cellsBusy == 0 &&
-                            U.compareAndSwapInt(this, CELLSBUSY, 0, 1)) {
-                            boolean created = false;
-                            try {               // Recheck under lock
-                                CounterCell[] rs; int m, j;
-                                if ((rs = counterCells) != null &&
-                                    (m = rs.length) > 0 &&
-                                    rs[j = (m - 1) & h] == null) {
-                                    rs[j] = r;
-                                    created = true;
-                                }
-                            } finally {
-                                cellsBusy = 0;
-                            }
-                            if (created)
+/*
+	不断修改探针哈希值 h，对不同位置的 CounterCell 进行 CAS，直到成功为止
+*/
+private final void fullAddCount(long x, boolean wasUncontended) {
+    int h;
+    //线程探针哈希值默认为 0，进入方法体，初始化
+    if ((h = ThreadLocalRandom.getProbe()) == 0) {
+        //初始化修改 探针哈希值
+        ThreadLocalRandom.localInit();
+        h = ThreadLocalRandom.getProbe();
+    }
+
+    for (;;) {
+        CounterCell[] as; CounterCell a; int n; long v;
+        if ((as = counterCells) != null && (n = as.length) > 0) {
+            if ((a = as[(n - 1) & h]) == null) {
+                if (cellsBusy == 0) {            // Try to attach new Cell
+                    CounterCell r = new CounterCell(x); // Optimistic create
+                    //后续都是对这个 a 进行 CAS +1，直到成功为止
+                    if (cellsBusy == 0 &&
+                        U.compareAndSwapInt(this, CELLSBUSY, 0, 1)) {
+                        boolean created = false;
+                        try {               // Recheck under lock
+                            CounterCell[] rs; int m, j;
+                            if ((rs = counterCells) != null &&
+                                (m = rs.length) > 0 &&
+                                rs[j = (m - 1) & h] == null) {
+                                rs[j] = r;
                                 break;
-                            continue;           // Slot is now non-empty
+                            }
                         }
+                        continue;           // Slot is now non-empty
                     }
                 }
-                else if (U.compareAndSwapLong(a, CELLVALUE, v = a.value, v + x))
-                    break;
+            }else{
+                //xxxx
             }
-            else if (U.compareAndSwapLong(this, BASECOUNT, v = baseCount, v + x))
-                break;                          // Fall back on using base
+            //重新计算 探针哈希值 h
+            h = ThreadLocalRandom.advanceProbe(h);
         }
     }
+}
 ```
 
-fullAddCount() 内部也是获取 ThreadLocalRandom.getProbe() & (as.len - 1) =》 h & (len - 1) 位置的 CounterCell 进行自旋尝试 CAS + 1 直到成功为止
 
 
+这样我们可以对 JDK 8 的这个 size() **总结**一波：
 
-这样我们可以对 JDK 8 的这个 size() **总结**一波，size() 内部调用 sumCount()，而 sumCount() 是统计 baseCount 和 所有的 CounterCell数组 的值，而这个 baseCount 和 CounterCell 数组是每次在 put() 和 remove() 方法的结尾调用 addCount() 进行修改的
+- size() 内部调用 sumCount()，而 sumCount() 是统计 baseCount 和 所有的 CounterCell数组 的值，而这个 baseCount 和 CounterCell 数组是每次在 put() 和 remove() 方法的结尾调用 addCount() 进行修改的
 
-在 addCount() 中，会先对 baseCount 尝试进行一次 CAS +1，如果成功了那么直接返回，如果失败了那么会获取一个跟当前线程相关的值 h = ThreadLocalRandom.getProbe()，然后使用 h & (len - 1) 的 hash 方式 定位到 CounterCell 数组中的某个位置，使用该位置上的 CounterCell 再进行一次 CAS +1，如果成功那么直接返回，如果失败了，那么调用 fullAddCount()
+- 在 addCount() 中，会先对 baseCount 尝试进行一次 CAS +1，如果成功了那么直接返回，如果失败了那么会获取一个跟当前线程的探针哈希值 h = ThreadLocalRandom.getProbe()，默认为 0，使用 h & (len - 1) 的 hash 方式 定位到 CounterCell 数组上的槽位，由于默认是 0，所以必定是对 0 号 CounterCell 进行 CAS，如果成功那么直接返回；如果失败了，那么调用 fullAddCount()
 
-在 fullAddCount() 中，同样是使用 上面线程的那个值，利用上面相同的 hash ，定位到相同的位置，使用 CounterCell 不断进行 CAS 自旋 + 1，直到成功为止
+- 在 fullAddCount() 中，不断改变 探针哈希值 h，使用不同的 CounterCell 进行 CAS，直到成功为止
+
+
 
 **CounterCell 数组的作用是什么？**
 
@@ -810,7 +708,7 @@ fullAddCount() 内部也是获取 ThreadLocalRandom.getProbe() & (as.len - 1) =�
 
 (可能会有人说，那么直接在 sync 锁里面执行不就行了？emmm，开发者应该是考虑早点释放锁，让其他等待锁的线程早点获取锁去执行吧，毕竟计数这个不太重要)
 
-基于此，所以出现了 CounterCell 数组，它是用作辅助的，当对 baseCount CAS 失败的时候，表示存在竞争，那么这时候就使用到 CounterCell 了，获取每个线程的某个值 h 来 hash 到不同的 CounterCell 数组位置，对其进行 CAS，这样的话，在不冲突的情况下，一次就可以存在  as.length 个线程可以进行 CAS +1 计数了，比起原本的多个线程都争夺一个 baseCount 效率提高太多了
+基于此，所以出现了 CounterCell 数组，它是用作辅助的，当对 baseCount CAS 失败的时候，表示存在竞争，**避免在一棵树上吊死**，那么这时候就使用到 CounterCell 了，不断改变 探针哈希值 h 来 hash 到不同的 CounterCell 数组位置，对其进行 CAS，这样的话，在不冲突的情况下，一次就可以存在  as.length 个线程可以进行 CAS +1 计数了，比起原本的多个线程都争夺一个 baseCount 效率提高太多了
 
 
 
@@ -826,35 +724,16 @@ JDK 8 是使用一个全局的 baseCount 和 全局的 CounterCell 辅助数组�
 
 
 
-```java
+## 5、扩容：rehash()、transfer()
 
-1	//v == 0 ,也就是0000 0000 , m0是size == 8时的掩码，也就是0000 0111
-    
-    
-    
-2	v |= ~m0; //~m0按位取反，为1111 1000 , 跟v做或得到v的新值为  1111 1000
-	m0 = 11111111 11111111 11111111 11111000
-
-3	v = rev(v);//将V的每一位反过来，得到 0001 1111
+### JDK 7
 
 
-4	v++; //这个是关键，加1，注意其效果，得到0010 0000 , 什么意思呢？对一个数加1，其实就是将这个数的低位的连续1变为0，然后将最低的一个0变为1，其实就是将最低的一个0变为1
-
-
-5	v = rev(v);//再次反过来，得到了：0000 0100  , 十进制就是4 ， 正好跟上面的吻合
-```
-
-
-
-## 6、扩容：rehash()、transfer()
-
-尼玛复杂得一批
-
-> ### JDK 7
-
-这里挂上源码，具体分析看下面
 
 ```java
+/*
+	rehash() 是在 put() 过程中调用的，Segment 已经加锁了，因此是线程安全的
+*/
 private void rehash(HashEntry<K,V> node) {
 	//旧桶
     HashEntry<K,V>[] oldTable = table;
@@ -909,7 +788,7 @@ private void rehash(HashEntry<K,V> node) {
             }
         }
     }
-    //下面是添加新节点到新桶中，具体看 put() 源码为什么这里需要传入 node
+    //下面是将 put() 的新节点 node 添加到新桶中，因为只有 put() 时才会触发扩容
     int nodeIndex = node.hash & sizeMask; // add the new node
     node.setNext(newTable[nodeIndex]);
     newTable[nodeIndex] = node;
@@ -919,11 +798,9 @@ private void rehash(HashEntry<K,V> node) {
 
 
 
-JDK 7 的这个扩容操作看起来有点玄乎，**需要知道的一点是：它是在 put() 的时候调用的，是已经加了锁的，因此线程安全**
+JDK 7 的这个扩容操作看起来有点玄，**table 中的每个槽位都会进行两次扫描**
 
-它里面有这么一段代码，即遍历到某个槽位，会对这个槽位进行第一次遍历
-
-这次槽位它的目的是找到在 hash 后在新桶中位置一致的最后几个节点，然后复用起来，不需要新建
+第一次扫描：找到 **重新 hash 后槽位一致** 的最后几个节点，将 lastRun 以及后面的节点进行复用，这些节点在第二次扫描中会忽略，并且不需要新建
 
 ```java
 //想要查找的目标的最后一个节点
@@ -946,7 +823,7 @@ for (HashEntry<K,V> last = next;
 newTable[lastIdx] = lastRun;
 ```
 
-而后面第二次进行遍历，就是遍历 [e, lastRun) 这个范围的节点，计算它们在新桶中的槽位，然后新建一个节点，使用头插法插入新桶中
+第二次扫描：遍历 [e, lastRun) 范围的节点，计算它们在新桶中的槽位，为它们新建一个节点，使用头插法插入 newTab 中
 
 ```java
 for (HashEntry<K,V> p = e; p != lastRun; p = p.next) {
@@ -962,25 +839,28 @@ for (HashEntry<K,V> p = e; p != lastRun; p = p.next) {
 
 
 
-的确一般看来，JDK 7 的这波操作有点迷，为什么要第一次遍历找出最后几个能够复用的节点？为什么第二次遍历要给每个节点都新建一个节点而不是复用它们？
+一般看来，JDK 7 的这波操作有点迷，为什么要新建 Node 节点而不是复用它们？
 
-因为 HashEntry 的 next 没有用 final 修饰，所以是可以改变指向的，那么就可以复用啊，为什么没有进行复用？
+HashEntry 的 next 没有用 final 修饰，所以是可以改变指向的，那么就可以复用啊，为什么没有进行复用？
 
 网上没说明，按照我个人的理解，**是为了 get() 中读线程考虑的**
 
+```java
+个人理解：
+    因为 get() 线程没有加锁，如果读的过程中在进行元素迁移，那么读的链表顺序会发生改变
+    比如 get() 定位的槽位上的链表是 1 -> 2 -> 3 -> 4 -> 5，目标 key = 3，当扫描到 2 的时候，扩容 将链表分为两段， 
+    table 变成 1 -> 3 -> 5 和 2 -> 4 两段链表
+    那么对于 get() 线程来说，接下来读到的就是 4 了，然后到达链表尾，发现不存在 3，返回 null，所以就导致错误发生
 ```
-因为 get() 线程没有加锁，如果读的过程中在进行元素迁移，那么读的链表顺序会发生改变
-比如 get() 定位的槽位上的链表是 1 -> 2 -> 3 -> 4 -> 5，而目标节点是 4，当读到 2 的时候，rehash 将链表分为两段， 
-1 -> 3 -> 5 和 2 -> 4，那么对于 get() 线程来说，接下来读到的就是 4 了，然后到达链表尾，发现不存在自己要找的值，返回 null，但其实是存在的，所以就导致错误发生
-```
 
-大概是为了防止这个问题的出现，所以才**不选择复用节点，新建节点，让原来的节点保持原来的顺序**
 
-而第一次遍历就是找出后面能够保证顺序的 hash 后会在同一个槽位的节点，这些节点可以进行复用，因为不需要改变它们的顺序
 
-比如
+大概是为了防止这个问题的出现，**所以才不选择修改 next 指向来复用节点，而是选择新建节点，让原来的节点保持原来的顺序**
 
-```
+而第一次扫描就是为了尽量减少创建的节点，选择可以进行复用的节点
+
+```java
+比如：
 0 - 1 - 2 - 3 - 0 - 0 - 0
 				↑
 			hash 后 0 - 0 - 0 都在新桶中的一个槽位，而 3 hash 后跟 0 在不同的槽位
@@ -992,9 +872,376 @@ for (HashEntry<K,V> p = e; p != lastRun; p = p.next) {
 
 
 
-> ### JDK 8
-
-尼玛复杂得一批，看不太懂
+### JDK 8
 
 
+
+[扩容源码解析](https://blog.csdn.net/ZOKEKAI/article/details/90051567)
+
+
+
+> #### 前言
+
+**JDK 8 中何时会进行扩容？**
+
+- 当调用 addCount() CAS 完成后 会调用 sumCount() 计算一次节点个数 s ，如果超过了阈值，那么调用 transfer() 进行扩容
+- 当每次 put() 过程中，发现槽位上链表的节点个数到达 8 个，但是 table 的长度不到 64，那么不会转换为红黑树，而是会调用 transfer() 进行扩容
+- 当 put() 过程中，发现 table 正在扩容， 那么调用 helpTransfer() 帮助扩容
+
+
+
+在讲解扩容之前，先介绍 JDK 8 中 ConcurrentHashMap 中 Node 新增的两种子节点：
+
+- TreeBin：封装了 红黑树节点 TreeNode（HashMap 中只有 TreeNode）
+- ForwardingNode ：table 扩容时的临时节点
+
+**它们都继承了 Node，目的是为了在 get() 时多态调用方法**
+
+在 Node 中有 find() 方法，表示用来查找 node，该方法在 Node 中没有什么实际作用，目的是为了让 TreeNode 和 ForwardingNode 都重写，然后利用多态进行调用
+
+在 get() 时，无论是 红黑树节点，还是正在扩容时的临时节点，利用多态性质，统一作为 Node 调用 find() 来获取目标 node
+
+
+
+**Node 节点：**
+
+相比 HashMap 多了 find()
+
+```java
+static class Node<K,V> implements Map.Entry<K,V> {
+    //省略代码
+    final int hash;
+    final K key;
+    volatile V val;
+    volatile Node<K,V> next;
+
+    Node(int hash, K key, V val, Node<K,V> next) {
+        this.hash = hash;
+        this.key = key;
+        this.val = val;
+        this.next = next;
+    }
+    //该方法在这里实际上没有什么作用，主要是为了让子类实现
+    Node<K,V> find(int h, Object k) {
+        Node<K,V> e = this;
+        if (k != null) {
+            do {
+                K ek;
+                if (e.hash == h &&
+                    ((ek = e.key) == k || (ek != null && k.equals(ek))))
+                    return e;
+            } while ((e = e.next) != null);
+        }
+        return null;
+    }
+}
+```
+
+
+
+**TreeBin 红黑树节点：**
+
+```java
+static final class TreeBin<K,V> extends Node<K,V> {
+    //维护真正的红黑树根节点
+    TreeNode<K,V> root;
+    volatile TreeNode<K,V> first;
+
+    /*
+        这里是调用 Node 的构造方法 Node(int hash, K key, V val, Node<K,V> next)，
+        将 hash 值设置为 TREEBIN， TREEBIN = -2
+        在 get() 的时候，发现 eh < 0，那么就会调用下面的 find() 方法
+        */ 
+    TreeBin(TreeNode<K,V> b) {
+        super(TREEBIN, null, null, null);
+    }
+    //重写的 find()
+    final Node<K,V> find(int h, Object k) {
+        if (k != null) {
+            for (Node<K,V> e = first; e != null; ) {
+                int s; K ek;
+                if (U.compareAndSwapInt(this, LOCKSTATE, s,
+                                        s + READER)) {
+                    TreeNode<K,V> r, p;
+                    p = ((r = root) == null ? null :
+                         //调用 TreeNode 的 findTreeNode()
+                         r.findTreeNode(h, k, null));
+                    return p;
+                }
+            }
+        }
+        return null;
+    }
+}
+```
+
+
+
+**扩容节点 ForwardingNode：**
+
+ForwardingNode 作为一个封装的 Node 节点，真正的 Node 数据存储在内部的 nextTable 中
+
+```java
+static final class ForwardingNode<K,V> extends Node<K,V> {
+    //封装了 newTable
+    final Node<K,V>[] nextTable;
+    
+    ForwardingNode(Node<K,V>[] tab) {
+        /*
+           作用跟 TreeBin 一致
+           MOVED = -1
+        */ 
+        super(MOVED, null, null, null);
+        this.nextTable = tab;
+    }
+
+    //重写的 find()
+    Node<K,V> find(int h, Object k) {
+        outer: for (Node<K,V>[] tab = nextTable;;) {
+            Node<K,V> e; int n;
+            if (k == null || tab == null || (n = tab.length) == 0 ||
+                (e = tabAt(tab, (n - 1) & h)) == null)
+                return null;
+            for (;;) {
+                int eh; K ek;
+                if ((eh = e.hash) == h &&
+                    ((ek = e.key) == k || (ek != null && k.equals(ek))))
+                    return e;
+                if (eh < 0) {
+                    if (e instanceof ForwardingNode) {
+                        tab = ((ForwardingNode<K,V>)e).nextTable;
+                        continue outer;
+                    }
+                    else
+                        //红黑树节点，调用 TreeBin 的 find()
+                        return e.find(h, k);
+                }
+                if ((e = e.next) == null)
+                    return null;
+            }
+        }
+    }
+}
+```
+
+
+
+> #### 扩容逻辑 transfer()
+
+
+
+```java
+/*
+stride：当前线程需要处理的扩容的槽位个数，最少必须是 16 个
+transferIndex：扩容之前的初始值为 tab.length，即在 table 数组的最右边，表示还剩下多少个槽位没有分配给线程去扩容
+
+当前线程分配到了 stride 个槽位，那么就剩下 transferIndex - stride 槽位还没有给线程去扩容
+*/
+private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
+    int n = tab.length, stride;
+    //计算每个线程处理 hash 槽位的个数 stride，最少需要 16 个
+    if ((stride = (NCPU > 1) ? (n >>> 3) / NCPU : n) < MIN_TRANSFER_STRIDE)
+        stride = MIN_TRANSFER_STRIDE; // subdivide range
+
+    //初始化 nextTab 数组，长度为 tab 的两倍
+    if (nextTab == null) {            // initiating
+        Node<K,V>[] nt = (Node<K,V>[])new Node<?,?>[n << 1];
+        nextTab = nt;
+        /*
+        这里的 nextTable 是全局变量，所有线程可见的，并且是 volatile 修饰
+        这里没有加锁，因此可能同时存在两个线程来初始化 nextTab，然后将 nextTab 赋值给 nextTable
+        该槽位是 volatile 写，一次只能有一个线程执行成功，因此先写的线程后续使用的时候，会发现 cache line 失效
+        因此会去主存重新读取新的 nextTable，保证了可见性
+        */
+        nextTable = nextTab;
+        //transferIndex 赋值为旧数组的长度，表示旧数组整个需要迁移
+        transferIndex = n;
+    }
+    int nextn = nextTab.length;
+
+    /*
+    	创建 ForwardingNode 节点时会将 nextTab 作为参数传入，即它内部会维护 新数组
+    	ForwardingNode 主要是用来代替 table 某个位置上的 Node 的
+    	ForwardingNode 节点有两个作用：
+    	1、代替 table 某个位置上的 Node，表示该槽位已经迁移完毕，但是整个 table 仍然处于扩容状态
+    	2、当其他线程执行 get() 的时候，可以通过这个 ForwardingNode 定位到它内部的 nextTab，然后进行数据查找
+    */
+    ForwardingNode<K,V> fwd = new ForwardingNode<K,V>(nextTab);
+
+    //table 的某个槽位 是否迁移完毕，默认为 true，当为 true 时，线程需要获取新的槽位进行迁移
+    boolean advance = true;
+    //是否扩容完成
+    boolean finishing = false;
+    for (int i = 0, bound = 0;;) {
+        Node<K,V> f; int fh;
+
+        //advance = true，线程获取新的槽位进行迁移
+        while (advance) {
+            int nextIndex, nextBound;
+            //全部迁移完成
+            if (--i >= bound || finishing){
+                //advance 设置为 false，退出循环
+                advance = false;
+            }
+            //还没有迁移完成，但是槽位已经全部分配给其他的线程处理了
+            else if ((nextIndex = transferIndex) <= 0) {
+                i = -1;
+                //advance 设置为 false，退出循环
+                advance = false;
+            }
+            //分配 stride 个槽位给当前线程处理， 槽位索引区间为 [bountd, i]
+            else if (U.compareAndSwapInt
+                     (this, TRANSFERINDEX, nextIndex,
+                      nextBound = (nextIndex > stride ?
+                                   nextIndex - stride : 0))) {
+                bound = nextBound;
+                i = nextIndex - 1;
+                //advance 设置为 false，退出循环
+                advance = false;
+            }
+        }
+        if (i < 0 || i >= n || i + n >= nextn) {
+            int sc;
+            //全部迁移完成
+            if (finishing) {
+                nextTable = null;
+                table = nextTab;
+                sizeCtl = (n << 1) - (n >>> 1);
+                return;
+            }
+            /*
+            	sizeCtl 记录当前正在扩容的线程数
+            	当前线程迁移完成，没有槽位需要该线程处理了，因此需要退出了，使用 CAS 将 sizeCtl - 1
+            */
+            if (U.compareAndSwapInt(this, SIZECTL, sc = sizeCtl, sc - 1)) {
+                if ((sc - 2) != resizeStamp(n) << RESIZE_STAMP_SHIFT)
+                    return;
+                finishing = advance = true;
+                i = n; // recheck before commit
+            }
+        }
+        //table[i] == null，那么直接将 ForwardingNode 放上去
+        else if ((f = tabAt(tab, i)) == null){
+            advance = casTabAt(tab, i, null, fwd);
+        }
+        //table[i] 槽位上为 ForwardingNode 节点，表示该槽位已经迁移完成
+        else if ((fh = f.hash) == MOVED){
+            advance = true; // already processed
+        }
+        else {
+
+            //对头节点加锁，注意，来这里扩容的时候是已经 put() 完成了或者在 put() 前，还没有加锁
+            synchronized (f) {
+                Node<K,V> ln, hn;
+                //判断头节点是否发生改变
+                if (tabAt(tab, i) == f) {
+                    /*
+                	这里的做法思路 跟 JDK 7 的扩容一样，对每个槽位上的链表
+                	同样是获取最后几个 hash 后处于同一个槽位的 Node 进行复用
+                	而不需要去新建它们
+                	同样是为了 get() 考虑，避免出现数据查找不到的情况
+                */
+                    //这里的 n 是旧数组的长度，这里用 hash & n 判断 hash 后是在旧位置还是在新位置
+                    int runBit = fh & n;
+                    Node<K,V> lastRun = f;
+                    //第一次扫描，找后面可以复用的节点
+                    for (Node<K,V> p = f.next; p != null; p = p.next) {
+                        int b = p.hash & n;
+                        //如果后一个节点跟 lastRun 不一致，那么更新 lastRun 和 runBit
+                        if (b != runBit) {
+                            runBit = b;
+                            lastRun = p;
+                        }
+                    }
+                    //判断 lastRun 是属于 高链表 还是 属于 低链表 的
+                    if (runBit == 0) {
+                        ln = lastRun;
+                        hn = null;
+                    }
+                    else {
+                        hn = lastRun;
+                        ln = null;
+                    }
+                    //第二次扫描，新建节点，lastRun 以及后面的节点不需要扫描
+                    for (Node<K,V> p = f; p != lastRun; p = p.next) {
+                        int ph = p.hash; K pk = p.key; V pv = p.val;
+                        //使用高低链表存储 新旧两个位置的节点，这里使用的是头插法，因此链表会反转
+                        if ((ph & n) == 0)
+                            ln = new Node<K,V>(ph, pk, pv, ln);
+                        else
+                            hn = new Node<K,V>(ph, pk, pv, hn);
+                    }
+                    //在 nextTab 的旧位置处设置 低链表
+                    setTabAt(nextTab, i, ln);
+                    //在 nextTab 的新位置处设置 高链表
+                    setTabAt(nextTab, i + n, hn);
+                    /*
+                	将旧数组 tab[i] 的 Node 替换为 ForwardingNode，
+                	其他线程 get() 时可以通过这个 fwd 找到迁移的数据
+                	这里不会影响到正在 get() 的线程，因为正在 get() 的线程仍然是在扫描 tab，链表的位置没有发生改变
+                */
+                    setTabAt(tab, i, fwd);
+                }
+                //红黑树
+                else if (f instanceof TreeBin){
+                    //代码省略
+                }
+            }
+        }
+    }
+}
+```
+
+
+
+整个扩容的过程：
+
+- 1）计算线程每次分配的 table 槽位数，最小为 16，即每个线程最少处理 16 个槽位
+- 2）判断 nextTab 是否已经初始化，如果没有，那么初始化，同时赋值给 全局的 volatile 变量 nextTable，这是 volatile 写，它可以不加锁解决多个线程同时对 nextTab 初始化的问题
+- 3）创建一个 ForwardingNode 节点，将 nextTable 作为参数传入，即 ForwardingNode 内部会维护 新的 table -- nextTable 
+- 4）领取分配到的槽位区间，一些细节就忽略了，当没有槽位可以分配时，那么该线程退出
+- 5）一个个处理分配到的槽位，跟 put() 时一样，对槽位上的头节点 f 进行加锁，当加锁完成后，再判断 f 是否发生改变
+- 6）然后就跟 JDK 7 的 rehash() 一样，对每个槽位上的链表进行两次扫描，一次扫描找到可复用节点，一次扫描新建（复制）节点，对节点的处理 跟 JDK 8 的 HashMap 扩容一样，将一个槽位上的链表 根据 hash 后位置的不同 分为 高、低 两条链表，这里对第二次扫描新建的节点插入到 高低链表 使用的是 **头插法**。
+- 7）将高低链表插入到 nextTab 上，然后将 table 上该槽位的 Node 替换为 ForwardingNode ，这样后续别的线程 get() 时就会访问到这个 ForwardingNode ，然后再通过这个 ForwardingNode  访问到迁移了数据的 nextTab
+
+
+
+ 涉及到以下几个变量：
+
+- transferIndex：表示当前还需要分配的槽位个数，初始值为旧数组的长度 table.length，假设旧数组长度为 64，transferIndex  = 64，如果线程 A 分配了 16 个槽位，那么 transferIndex = 48，最终到达 0 时表示所有的槽位分配完毕
+- stride：表示每次分配给线程处理的槽位个数，最少为 16
+- ForwardingNode ：内部会维护 新数组 nextTable，已经迁移完成的旧数组节点会被替换为该节点
+- sizeCtl：正在扩容的线程数量，当到达一定阈值时，那么不能再添加线程进行扩容
+
+![img](https://img-blog.csdnimg.cn/20190510093435247.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L1pPS0VLQUk=,size_16,color_FFFFFF,t_70)  
+
+
+
+
+
+> #### 协助扩容 helpTransfer()
+
+```java
+final Node<K,V>[] helpTransfer(Node<K,V>[] tab, Node<K,V> f) {
+    Node<K,V>[] nextTab; int sc;
+    if (tab != null && (f instanceof ForwardingNode) &&
+        (nextTab = ((ForwardingNode<K,V>)f).nextTable) != null) {
+        int rs = resizeStamp(tab.length);
+        while (nextTab == nextTable && table == tab &&
+               (sc = sizeCtl) < 0) {
+            if ((sc >>> RESIZE_STAMP_SHIFT) != rs || sc == rs + 1 ||
+                //正在协助扩容的线程数到达阈值 或者 transferIndex <= 0 所有槽位已经分配完毕，那么该线程直接退出
+                sc == rs + MAX_RESIZERS || transferIndex <= 0)
+                break;
+            //将 sizeCtl + 1，即正在协助扩容的线程数 + 1，当 CAS 成功时，那么当前线程调用 transfer() 进行协助
+            if (U.compareAndSwapInt(this, SIZECTL, sc, sc + 1)) {
+                transfer(tab, nextTab);
+                break;
+            }
+        }
+        return nextTab;
+    }
+    return table;
+}
+```
 

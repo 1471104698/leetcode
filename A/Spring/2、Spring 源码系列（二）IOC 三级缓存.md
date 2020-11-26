@@ -1,6 +1,6 @@
 # IOC 三级缓存
 
-
+[三级缓存解决循环依赖](https://cloud.tencent.com/developer/article/1497692)
 
 ## 1、三级缓存的作用
 

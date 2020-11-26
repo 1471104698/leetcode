@@ -176,3 +176,87 @@ public class UserImportSelector implements ImportSelector {
 在 SpringBoot 中，自动配置的类都是写明在 spring.factories 文件中的，那么就需要去这个文件中读取所有需要配置的类，然后注入到 IOC 容器中，执行这个读取的就是 @EnableAutoConfigration 注解 @Import 进去的 AutoConfigurationImportSelector.class
 
 它实现了 ImportSelector.接口，在扫描的时候会调用它的 selectImprts() 方法，该方法内部会读取 spring.factories 文件，将文件内的类整合到一个字符串数组中返回，这样在后续它们都能够被注入到 IOC 文件中，完成自动配置
+
+
+
+
+
+## 4、@Autowire 和 @Resource 的区别
+
+@Autowire 源码如下：
+
+```java
+@Target({ElementType.CONSTRUCTOR, ElementType.METHOD, ElementType.PARAMETER, ElementType.FIELD, ElementType.ANNOTATION_TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface Autowired {
+
+	boolean required() default true;
+}
+```
+
+它只有一个 required 字段，用来标识注解的变量是否必须注入，默认为 true，如果注解的字段的 bean 为 Null，那么抛出异常
+
+
+
+@Resource 源码如下：
+
+```java
+@Target({TYPE, FIELD, METHOD})
+@Retention(RUNTIME)
+public @interface Resource {
+
+    String name() default "";
+
+    Class<?> type() default java.lang.Object.class;
+}
+```
+
+@Resource 中可以指定注入的 bean 的 name 和 type
+
+
+
+@Autowire 和 @Resource 的区别：
+
+- @Autowire 默认按照 type 注入，如果存在多个相同 type 的 bean，那么按照 字段名 进行 name 注入，即 @Autowire 存在 name 注入，但是不能自己指定 name，而是 Spring 默认**按照字段名注入**
+
+- @Resource 可以通过 @Resource(name, type) 字段来执行 type 注入 或者 name 注入；同时，当只使用 type 注入时，跟 @Autowire 一样，如果存在多个 bean，那么默认**按照 字段名 注入**，如果同时使用了 type 和 name，那么先找 type，再按照 name 注入，即 @Resource 可以自己指定注入的 name，而不需要强制要求使用 变量名
+- @Autowire(require = ?) 可以设置该字段对应的 bean 为空时是否抛出异常，如果 require = false，表示允许字段注入的 bean 为空，而不会抛异常；@Resource 则必须强制注入 bean 存在，如果找不到对应的 bean，那么就抛出异常
+- @Autowire 也可以跟 @Qualifier 一起使用，组合形成 @Resource，同时进行 type 注入 和 name 注入，同时还保留了 @Autowire 的指定 require 的特点
+
+```java
+@Component
+class Q  {
+    //注入成功，存在多个 R bean，根据字段名 rr2 进行 name 注入，存在 beanName 为 rr2 的 bean，成功注入
+    @Autowired
+    R ar1;	
+    //注入失败，找到 3 个 类型为 R 的 bean，同时没有任何一个 beanName 为 r，无法注入
+    @Resource(type = R.class)	
+    R r;	
+    //注入成功，找到 3 个 类型为 R 的 bean，但是存在一个 beanName 为 rr1 的 R1 
+    @Resource(type = R.class)	
+    R rr1;	
+    //注入成功，存在一个 beanName 为 rr3 的 R3
+    @Resource(name = “rr3")		
+    R rr2;	
+    //注入失败，不存在 R1 bean 的 beanName 为 rr3 的
+    @Resource(type = R1.class, name = “rr3")		
+    R r1;	
+    //注入成功，存在 R bean 的 beanName 为 rr3 的，注入
+    @Resource(type = R.class, name = “rr3")		
+    R r3;	
+}
+
+class R{
+}
+@Component("rr1")
+class R1 extends R{
+}
+@Component("rr2")
+class R2 extends R{
+}
+@Component("rr3")
+class R3 extends R{
+}
+```
+

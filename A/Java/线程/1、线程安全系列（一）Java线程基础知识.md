@@ -307,3 +307,55 @@ public class ThreadNumDemo {
 
 在 JDK1.8 中，可以发现一个 java 程序启动时，会创建 6 个线程
 
+
+
+## 8、守护线程
+
+守护线程 跟 普通线程 的区别：守护线程 本身不会影响程序的生命周期，当一个程序的所有普通线程都执行完毕时，那么守护线程也会相应退出
+
+一个程序的生命周期是看这些普通线程的，一旦所有的普通线程执行完成（包括主线程），那么程序也就走到头了，同时守护线程也会销毁
+
+Thread 类中有一个 setDaemon() 方法，它需要对象来调用，能将线程设置为守护线程
+
+不过需要在 start() 之前设置，如果线程启动后设置，那么会抛出异常 IllegalThreadStateException
+
+
+
+下面是我进行测试守护线程生命周期的例子：
+
+当初是在看守护线程是跟 父线程的生命周期有关，还是跟整个程序的生命周期有关
+
+显然当 t1 退出后，t2 仍在继续打印，而当 main 线程退出后，t2 也退出了
+
+```java
+public abstract class A {
+
+    public static void main(String[] args) throws Exception {
+        Thread t1 = new Thread(() -> {
+            Thread t2 = new Thread(() -> {
+                while (true) {
+                    try {
+                        Thread.sleep(2000);
+                        System.out.println("1");
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+            //必须在现在 start() 前设置，如果线程已经运行，那么会抛出异常 IllegalThreadStateException
+            t2.setDaemon(true);
+            t2.start();
+        });
+        t1.start();
+        t1.join();
+        System.out.println("t1 end");
+        new Scanner(System.in).nextLine();
+    }
+}
+```
+
+
+
+如果不将 t2 设置为守护线程，那么 t1 和 main 线程都退出后，t2 也会继续执行，导致程序不会退出
+
+这也就是为什么 GC 线程要设置为 守护线程的原因了，因为如果程序逻辑都执行完了，结果由于 GC 线程还在执行而导致程序无法正常结束，这显然是有毛病的

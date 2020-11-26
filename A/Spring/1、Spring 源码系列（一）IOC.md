@@ -4,7 +4,7 @@
 
 ## 1、IOC 的作用
 
-> ### IOC 的作用一：无需硬编码
+> #### IOC 的作用一：无需硬编码
 
 IOC 的好处就是，当存在 10 个类内部引用了 UserDao 这个类的时候，我们不需要硬编码去指定引用的是哪个对象
 
@@ -27,13 +27,15 @@ class C{
 //....xxx
 ```
 
-而对应的实现类对象，我们只需要添加 @Bean 让 Spring 通过 IOC 创建存储到 IOC 容器中，然后后续自动注入
+
+
+而对应的实现类对象，我们只需要在类上添加 @Component 让 Spring 通过 IOC 创建存储到 IOC 容器中，然后后续自动注入
 
 ```java
 interface UserDao{
  	//xxx   
 }
-@Bean
+@Component
 class  FuxkUserDao implements UserDao{
     //xxx
 }
@@ -41,27 +43,26 @@ class  FuxkUserDao implements UserDao{
 
 对于上面这个例子，我们注入的就是 FuxkUserDao 对象
 
-但是，假如我们后续不想用 FuxkUserDao 作为实现类了，而是想要一个 ShitUserDao 作为实现类
+但是，假如我们后续不想用 FuxkUserDao 作为实现类了，而是想要一个注入 ShitUserDao 作为实现类
+
+那么我们只需要在 ShitUserDao 类上添加 @Component，在 A、B、C 类中的对象创建代码全部无需改动
 
 ```java
 interface UserDao{
  	//xxx   
 }
-
 class  FuxkUserDao implements UserDao{
     //xxx
 }
-@Bean
+@Component
 class  ShitUserDao  implements UserDao{
     //xxx
 }
 ```
 
-那么我们只需要改变注入的对象即可，其他的在 A、B、C 类中的代码全部无需改动
 
 
-
-> ### IOC 的作用二：自动解决多层依赖
+> #### IOC 的作用二：自动解决多层依赖
 
 这个其实也算是解决硬编码，不过跟上面的硬编码方面属于不同方面的，因此单独拿出来讲
 
@@ -88,7 +89,7 @@ class Main{
 
 而可能这个 A 类在很多地方都需要用到，这样就需要多处改动代码。
 
-当然，这样的话，我们可能就会想到使用 **工厂模式中的 工厂方法模式**，将创建 A 的逻辑给封装起来，这样的话，所有地方调用都只需要调用这个方法获取一个 A 对象，而我们修改也只需要修改这个方法即可
+当然，这样的话，我们可能就会想到使用 **工厂模式**，将创建 A 的逻辑给封装起来，这样的话，所有地方调用都只需要调用这个方法获取一个 A 对象，而我们修改也只需要修改这个方法即可
 
 ```java
 class AFactory{
@@ -100,7 +101,9 @@ class AFactory{
 
 
 
-同理，**IOC 也是使用了这个 工厂方法模式**，不过做了一点加工，大致逻辑如下：
+同理，**IOC 内部创建 bean 也是使用了 工厂模式 中的简单工厂模式**，只对外提供一个 getBean()，bean 的创建在 getBean() 中进行封装，通过方法入参来标识需要创建的对象
+
+大致逻辑如下：
 
 （上面的是构造传参，这里就不说构造传参了，说变量注入，原理都是通过反射）
 
@@ -147,32 +150,55 @@ IOC 会自动在 C 中注入 D，在 B 中注入 C，在 A 中注入 B，然后�
 
 ## 2、IOC 和 DI 的关系
 
-IOC 是一种设计思想，就类似 JVM 的方法区，它需要有一个具体的实现， **实现 IOC 的是 DI（Dependency Injection ）依赖注入**
+IOC 即 控制反转，创建对象的操作不再需要程序员来完成，这是一种设计思想，就类似 JVM 的方法区，它需要有一个具体的实现
 
-IOC 注入的两种方式：
+DI 即  **Dependency Injection** ，依赖注入，通过 DI 的方式来实现 IOC。
 
-- 构造注入
-- setter 注入 || field 注入（原理是反射注入，通过反射调用 setter() 或者 field，@Autowire 注入方式）
-
+在 Bean 创建过程中，判断该 Bean 依赖其他哪些 Bean，那么去创建依赖的 Bean，然后通过 各种注入方法 设置到 该 Bean 对应的 field 中。这里就是 IOC 所谓的 由 Spring 来控制对象的创建的设计思想的体现，而实现它的是这个自动查找依赖的对象，并且根据不同的方式设置到创建对象的对应 field 中的 DI
 
 
 
+DI 三种方式：
 
-## 3、IOC 的 BeanFactory
+- 构造注入（调用构造器时注入）
+- setter 注入（反射调用 setter 方法注入）
+- @Autowire的 field 注入（反射获取 field，然后填充对象）
 
-ApplicationContext 是 BeanFacotry 接口 的一个子接口，即 ApplicationContext 是 BeanFacotry 的派生类
 
-其次对外开放的我们程序员用的是 AnnotationConfigApplicationContext，它是 ApplicationContext 的一个子实现类
 
-它继承了一个 GenericApplicationContext 类
+
+
+## 3、BeanFactory 和 ApplicationContext
+
+[从源码看待 BeanFactory 和 ApplicationContext](https://cloud.tencent.com/developer/article/1574870)
+
+
+
+Spring 中定义了 BeanFactory 和 ApplicationContext 两种接口，好像之前是把这两种当作两种不同的 IOC 容器的
+
+
+
+ApplicationContext 继承了 BeanFactory 接口，即 **ApplicationContext 本身是对 BeanFactory 的扩展**
+
+ApplicationContext 和 BeanFactory 的继承关系如下：
+
+ ![img](https://pic4.zhimg.com/80/v2-1006341abadfd3466b5b4587f349ab27_720w.jpg?source=1940ef5c) 
+
+BeanFactory 作为一个 Bean 工厂，只具备创建 Bean 的功能，不支持 AOP、事件发布（监听器）等功能
+
+而我们常用的 ApplicationContext ： AnnotationConfigApplicationContext，它具有 BeanFactory 的创建 bean 的功能，并且还添加了 AOP 和 事件发布 功能，同时它内部还维护了一个真正的 BeanFactory 
+
+
+
+AnnotationConfigApplicationContext 继承了一个 GenericApplicationContext 类
 
 ```java
 public class AnnotationConfigApplicationContext extends GenericApplicationContext implements AnnotationConfigRegistry {
-	//xxx
-}
 ```
 
-在 GenericApplicationContext 类中它定义了一个 DefaultListableBeanFactory 类型的变量，这个变量是真正的 beanFactroy，是 IOC 的核心
+在 GenericApplicationContext 类中维护了一个 DefaultListableBeanFactory ，它是一个真正的 beanFactroy，是 IOC 的核心，ApplicationContext 的 getBean() 逻辑就是获取这个 BeanFactory 并且调用它的 getBean() 来创建 Bean 的
+
+DefaultListableBeanFactory 中维护了所有 Bean 的 BeanDefinition，后续调用 getBean() 时就是使用 BeanDefinition 中的信息来创建 Bean
 
 ```java
 public class GenericApplicationContext extends AbstractApplicationContext implements BeanDefinitionRegistry {
@@ -181,44 +207,43 @@ public class GenericApplicationContext extends AbstractApplicationContext implem
 }
 ```
 
-为什么说 beanFactory 是 IOC 的核心？因为就是它**创建和生成所有的 bean**
 
-它维护了所有的 bean 的 BeanDefinition（bean 定义） 和 beanName
+
+同时 GenericApplicationContext 的父类 AbstractApplicationContext 中维护了所有的后置处理器 以及 事件广播器 和 所有注册的监听器 Listener
 
 ```java
-public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFactory
-		implements ConfigurableListableBeanFactory, BeanDefinitionRegistry, Serializable {
+public abstract class AbstractApplicationContext extends DefaultResourceLoader
+    implements ConfigurableApplicationContext {
 
-    //存储 BeanDefinition 的 map
-	private final Map<String, BeanDefinition> beanDefinitionMap = new ConcurrentHashMap<>(256);
-    
-	/** List of bean definition names, in registration order */
-	//存储 BeanDefinition name 的 map
-	private volatile List<String> beanDefinitionNames = new ArrayList<>(256);
+    //存储所有的后置处理器
+    private final List<BeanFactoryPostProcessor> beanFactoryPostProcessors = new ArrayList<>();
 
-	/** Map of singleton and non-singleton bean names, keyed by dependency type */
-	private final Map<Class<?>, String[]> allBeanNamesByType = new ConcurrentHashMap<>(64);
+    //监听广播器，当有消息的时候，会找到所有的监听该事件的监听器 Listener，然后回调它们
+    private ApplicationEventMulticaster applicationEventMulticaster;
 
-	/** Map of singleton-only bean names, keyed by dependency type */
-	private final Map<Class<?>, String[]> singletonBeanNamesByType = new ConcurrentHashMap<>(64);
-	
-    //other something
-}
+    //存储所有的监听器 Listener
+    private final Set<ApplicationListener<?>> applicationListeners = new LinkedHashSet<>();
 ```
 
-而 BeanDefinition 中存储了关于 bean 的所有信息，比如注解、需要注入的类、@DependOn 关系 等
 
-后续 bean 的创建就是靠这个 BeanDefinition，并且 bean 的创建也是 beanFactory 来完成的
 
-而三级缓存中的一级缓存 SingletonObjects 只是存储了所有的 成品 bean 而已，它不参与任何的 bean 的创建
+> #### IOC 创建 Bean 和 存储 Bean 的类
 
-所以真正的 beanFactory 是这个 DefaultListableBeanFactory ，而不是 SingletonObjects 
+在 Spring 中，创建 Bean 和 存储创建好的 Bean 使用的是不同的类
+
+**创建 Bean 使用的是 BeanFactory，即 GenericApplicationContext 中维护的 DefaultListableBeanFactory** ，它负责创建 Bean 的逻辑
+
+**而创建好的 Bean 不会存储在 DefaultListableBeanFactory 中，而是存储到 IOC 三级缓存中的 第一级缓存 SingletonObjects 中**
+
+**我们称它为单例池**
+
+当 Spring 启动完成，所有的 Bean 都创建好后，程序员调用 getBean() 获取 Bean 实际上是在 SingletonObjects 中获取已经创建好的 Bean
+
+
 
 
 
 ## 4、bean 的生命周期（重点）
-
-具体看  [https:// cloud.tencent.com/developer/article/1497692](https://cloud.tencent.com/developer/article/1497692) 
 
 
 

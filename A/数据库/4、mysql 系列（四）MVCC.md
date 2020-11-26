@@ -1,6 +1,6 @@
 ## MVCC
 
-具体看  [https://blog.csdn.net/Waves___/article/details/105295060#1.2%E3%80%81Read%20View%20%E7%BB%93%E6%9E%84](https://blog.csdn.net/Waves___/article/details/105295060#1.2、Read View 结构) 
+[MVCC 讲解 -- CSDN](https://blog.csdn.net/Waves___/article/details/105295060#1.2、Read View 结构)
 
 
 
@@ -28,7 +28,7 @@ MVCC 是不加锁的，最开始的 mysql 使用原生锁，相当于 java  的 
 
 InnoDB 在表中的每行数据后都会添加 3 个 隐藏字段：
 
-- **DB_TRX_ID**：记录最近一次对 当前数据行 做修改的事务 id，对于 delete 操作，同样认为是update，不过修改的是删除标志位
+- **DB_TRX_ID**：记录最近一次对 当前数据行 做修改的事务 id，初始化插入时 DB_TRX_ID 为 Null，因为是记录修改的
 - **DB_ROLL_PTR**：回滚指针，看上面的 undo log 图，类似链表形式，用于回滚
 - **DB_ROW_ID**：当没有主键或者唯一非空索引的时候，使用的就是这个 id，**这个跟 MVCC 没什么关系**
 

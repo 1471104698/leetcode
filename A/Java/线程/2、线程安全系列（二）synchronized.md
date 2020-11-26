@@ -8,7 +8,10 @@
 
  
 
-synchronized 锁 实现是靠 OOP 对象头中的 markOop 对象 _mark，即常说的 Mark Word
+sync 锁能够保证可见性和原子性：
+
+- 可见性：线程获取 sync 锁时会清空工作内存，后续访问时会读取主存新值
+- 原子性：通过对象头的 _mark（Mark ） 和 ObjectMonitor 对象来实现
 
 
 
@@ -131,11 +134,94 @@ _EntryList：维护的是 阻塞在 同步代码块处 的线程
 
 
 
-## 2、锁升级过程
+
+
+## 2、wait() 和 notify() 使用注意点
+
+wait() 和 notify() 一般是配合 sync 锁一起使用的
+
+sync 锁锁住 A 对象，那么会创建一个 ObjectMonitor 对象，然后将 A 对象的 _mark 中的 30bit （保留 2bit 作为锁标识符）替换为指向 ObjectMonitor 对象的指针，内部维护了 EntryList 和 WaitSet
+
+因此，ObjectMonitor 对象是在 A 对象中的，我们调用 wait() 也必须调用 A 对象的 wait()，因为只有调用了 A 对象的 wait() 才会将当前线程放入到 A 对象的 waitSet 中进行管理，否则如果调用的是 B 对象的 wait()，那么会发现 B 对象的 _mark 是无锁状态，根本不存在什么 waitSet 
+
+```java
+public class A {
+    static Object o = new Object();
+    public static void main(String[] args) {
+        
+        Thread t1 = new Thread(() -> {
+            //锁的是 A.class 对象
+            synchronized (A.class) {
+                try {
+                    //调用的是 o 对象的 wait()，报错 IllegalMonitorStateException
+                    o.wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+        
+    }
+}
+```
 
 
 
-### 2.1、偏向锁
+当线程调用 wait() 进入阻塞状态时，如果有其他线程调用了它的 interrupt()
+
+那么它会中断退出阻塞，这时候**不会直接退出同步代码块，也不会在没有获取锁的情况下继续执行同步代码块**，而是会尝试获取锁，如果获取失败，仍然会继续阻塞等待
+
+```java
+public class A {
+
+    static Object o = new Object();
+    public static void main(String[] args) throws InterruptedException {
+        Thread t1 = new Thread(() -> {
+            System.out.println("start");
+            synchronized (A.class) {
+                try {
+                    A.class.wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                for(int i = 0; i < 10; i++){
+                    System.out.println("t1");
+                }
+            }
+        });
+        Thread t2 = new Thread(() -> {
+            System.out.println("t2");
+            synchronized (A.class) {
+                //中断 t1 的等待，但是由于当前线程没有释放锁，所以 t1 获取不了锁也不会继续执行
+                t1.interrupt();
+                for (int i = 0; i < 10; i++){
+                    System.out.println("t2");
+                }
+                //IO 阻塞看 t1 的执行情况，发现这里没有执行完释放锁，那么 t1 获取不了锁也不会执行
+                new Scanner(System.in).nextLine();
+            }
+            System.out.println("t2 end");
+        });
+        t1.start();
+        try {
+            Thread.sleep(10);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        t2.start();
+        t1.join();
+        t2.join();
+    }
+}
+```
+
+
+
+## 3、锁升级过程
+
+
+
+### 3.1、偏向锁
 
 [偏向锁](https://blog.csdn.net/sinat_41832255/article/details/89309944)
 
@@ -212,7 +298,7 @@ _EntryList：维护的是 阻塞在 同步代码块处 的线程
 
 
 
-### 2.2、轻量级锁
+### 3.2、轻量级锁
 
 
 
@@ -283,7 +369,7 @@ _EntryList：维护的是 阻塞在 同步代码块处 的线程
 
 
 
-### 2.3、重量级锁
+### 3.3、重量级锁
 
 
 
@@ -307,7 +393,7 @@ synchronized 中可以配合使用 wait() 和 notify() 来阻塞和唤醒线程 
 
 
 
-## 3、偏向锁 和 hashCode
+## 4、偏向锁 和 hashCode
 
 
 
@@ -352,3 +438,34 @@ System 提供了这个方法：System.identityHashCode(Object o)
 轻量级锁在获取锁前，对象是无锁状态的，而它会将 _mark 复制到 自己栈帧的 锁记录 中，在解锁的时候会将 _mark 替换回去，而复制的这份 _mark 就是无锁状态的 _mark，即计算出来的 hashCode 只要存储在 无锁状态的 _mark 中再复制起来，后续再替换回去就可以了
 
 重量级锁的 ObjectMonitor 对象中有字段会记录 无锁状态下的 _mark
+
+
+
+
+
+## 5、synchronized 和 lock 的区别
+
+> ### synchronized
+
+- 修饰方法和代码块
+- 可重入，并且有 偏向锁、轻量级锁、重量级锁 三种，会根据竞争情况进行锁升级
+- 发生异常时会自动释放锁（在异常结束处加了一条字节码指令 monitorexit），但是如果捕获了异常那么就不会执行 monitorexit，因此就不会提前释放锁
+
+**但 synchronized 锁不够灵活，获取锁的时候只能一直阻塞，不能够中断，因此容易造成死锁，在某些需要中断等待的场景也不能使用**
+
+
+
+> ### lock
+
+- 具有灵活性，**灵活性在于可以手动上锁和释放锁，并且可以指定等待锁的时间，不会死等**，线程池中 Worker 类 就继承了 AQS，赋予了 tryAcquire() 锁的语义，当调用 shutdown() 的时候线程池可以调用 tryLock() 判断线程是否空闲
+- 能够保证可见性（**由于 state 是 volatile 的，所以释放锁，即修改 state 的时候，会将前面的操作一并刷新入内存，这样其他线程看得到了**）
+- 可重入
+- 可以配套使用 `lock.newCondition()` 来指定不同类型的锁对象，可以方便唤醒某种类型的线程，用于生产者消费者模式
+- 发生异常不会自动释放锁，所以需要记住在 finally 处调用 unlock()
+
+lock 的灵活性使得可以避免无限期的阻塞，以及可以用来线程池判断线程的状态
+
+**使用 tryLock(int time) 可以被设置等待超时时间，期间还可以被中断，不过使用 lock() 无法中断，因为线程在同步对象中会调用 park() 挂起，不会去识别中断标识符**
+
+
+

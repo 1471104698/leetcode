@@ -4,31 +4,54 @@
 
 ## 1、undo log
 
-undo log 记录的是数据修改前的旧数据，它不会存储整行旧数据，只会存储修改列的旧数据
 
-undo log 用于回滚 和 MVCC
+
+undo log 记录写操作前的旧数据，用于 MVCC 和 回滚
+
+​	（这里的回滚不只是事务过程中的回滚，也涉及到宕机恢复时的回滚）
 
 undo log 类型有两种：
 
-- **insert undo log：**事务对 insert 操作产生的 undo log，该 log 用来当前事务回滚的，在 commit 后这个 undo log 会直接删除，因为对于其他事务而言，本来就不存在旧数据，那么自然没有什么旧版本的可见性
-- **update undo log：**将修改列的旧数据 copy 一份作为 undo log，
-  - InnoDB 默认将 delete 当作 update，delete 只是修改 删除标志位，数据的真正删除是 由  purge（清除）线程执行的，即执行 delete 操作后数据行不会立即删除
+- **insert undo log：**insert 产生
 
-undo log 不会无限增加，当数据库现在的 ReadView 中的事务 id 都跟 该 undo log 中记录的事务 id 搭不上边，该 undo log 会被删除
+  ```java
+  对应的 undo log 内容为  <delete from xxx>，该 undo log 在事务提交后可以直接删除
+  								（这里的删除是说不放到回滚指针上，而不是不刷盘）
+  因为 Mysql 会自动在每条数据上添加 3 个隐藏字段，其中有 DB_TRX_ID 和 DB_ROLL_PTR
+  DB_TRX_ID：用来记录最近一次对该数据行进行修改的事务id，初始化插入时 DB_TRX_ID 为 Null
+  DB_ROLL_PTR：记录回滚指针，如果没有旧版本，那么回滚指针为 Null
+  
+  当事务 100 插入 data A，那么这条数据的 DB_TRX_ID = 100
+  如果别的事务快照读，对于它们的 ReadView 版本来说，它们发现 DB_TRX_ID 为 Null 并且 DB_ROLL_PTR = Null，自然就认为这条数据不可见了，不需要 undo log
+  如果别的事务当前读，那么自然可以直接从 缓存/磁盘 中读取，也不需要这条 undo log
+  
+  因此，insert undo log 在事务提交完可以直接删除
+  ```
 
+  
 
+- **update undo log：**update 或者 delete 产生
 
-> ### undo log 添加过程
+  ```java
+  InnoDB 默认将 delete 当作 update，delete 操作 只是将 删除标志位 delete_bit 置为 1
+  不会真正的去释放空间，即 执行 delete 操作后数据还是占用空间
+  
+  update undo log 是由在后续由 purge（清除）线程认为当前所有的 ReadView 版本都不需要使用到该 undo log 时进行清除
+  ```
+
+  
+
+> #### undo log 添加过程
 
 undo log 中有一个字段` db_trx_id` 记录修改当前数据的事务 id，以及一个` db_roll_ptr`，指向 undo log 版本链
 
 
 
-**初始数据行：**
+**插入数据行：**此时由于是刚插入，因此回滚指针为 Null，而事务 ID 记录的是 插入该行数据的事务
 
 *![image.png](https://pic.leetcode-cn.com/1602484884-pnQOIh-image.png)*
 
-**事务 1 修改数据行：**
+**事务 1 修改数据行：**当前版本中的事务 ID 是 1，同时回滚指针指向旧版本
  ![img](http://www.linuxidc.com/upload/2011_09/110904154240162.gif) 
 
 
@@ -43,33 +66,54 @@ undo log 中有一个字段` db_trx_id` 记录修改当前数据的事务 id，�
 
 ## 2、redo log
 
-> ### 为什么会存在 redo log
+
 
 磁盘 IO 和 内存读写效率不是一个数量级的
 
 在 mysql 中，如果每完成一次写操作都要写进磁盘：先寻道，然后数据更新；那么整个 IO 成本将会很高，同时效率也很低
 
-为了解决这个问题，mysql 使用了另外一种更新机制：redo log，这种机制可以让新数据在数据库空闲的时候再刷盘
+为了解决这个问题，mysql 使用了 buffer pool 和 redo log 机制
 
 
 
-1、redo log 涉及两个东西：redo log  buffer 和 redo log file，redo log  buffer 是内存中的，redo log file 是磁盘中的
+跟我们平时使用 redis 缓存来提高效率一样， mysql 也有自己的缓存，buffer pool 就是 mysql 的缓存
 
-2、每次执行写操作的时候，mysql 会将更新的数据先写入到 buffer pool（缓冲池），同时会生成一条 redo log 数据，写到 redo log buffer 中，等到事务 commit 时，将 redo log buffer 中的内容刷新到 redo log file 上，由于是顺序写入，按照 append() 的方式，所以比直接刷新到磁盘上的 随机写入效率高得多，因为只需要一次寻道
+mysql 写数据不会直接刷盘，而是会在 buffer pool 中保存脏数据，然后将数据更新持久化到 redo log，防止宕机数据丢失
 
-3、buffer pool 中的脏数据一般会在数据库空闲的时候写回磁盘
-
-5、由于 buffer pool 的数据是存储在内存中的，所以可能会由于数据库宕机等原因导致 buffer pool 中的数据还没刷新到磁盘中就丢失了，这时候当数据库重启的时候，就会去读取 redo log file，进行数据的恢复
-
-6、所以，redo log 就是因为 mysql 使用了 buffer pool 在内存中保存更新的数据，而没有及时刷新为硬盘，以此来提高效率，但可能会由于数据库宕机导致 buffer pool 中的所有数据都丢失了，而需要 redo log 机制 来恢复数据
+然后在后面选择一个空闲的时间将大批量 脏数据 都刷新会磁盘
 
 
 
-**redo log 存储的是修改列的新值，而不是数据行**
+**buffer pool：**
+
+```java
+mysql 读写的都是 buffer pool 中的数据，当读的时候，如果 buffer pool 中没有数据，那么从磁盘加载进来，当写的时候，也是直接写到 buffer pool 中。
+buffer pool 是一个链表结构，以 数据页（16KB） 作为每个链表节点
+
+为什么使用链表的结构？
+因为 buffer pool 的大小也是有限的，不可能只加载而不淘汰，因此这个链表节点就是为了 淘汰某些数据页 而设计的
+个人认为是使用 LRU 算法
+淘汰出去的页如果存在脏数据，那么需要进行刷盘
+```
 
 
 
-> ### redo log file 的结构
+**redo log:**
+
+```java
+redo log 是 InnoDB 引擎特有的
+    
+redo log 涉及两个部分：redo log buffer 和 redo log file
+redo log buffer 是内存的一段缓存，redo log file 是磁盘持久化文件
+
+每次事务执行过程中，涉及到写操作时
+在执行写操作前，会先使用 undo log 记录旧数据，执行写操作后，使用 redo log 记录新数据
+事务过程中 redo log 记录行就是存储在 redo log buffer 中，当事务进行 commit 的时候，就会将 redo log buffer 中的数据按照顺序写的方式刷盘到 redo log file 中，完成持久化
+```
+
+
+
+> #### redo log file 的结构
 
 **redo log 使用循环写的方式**
 
@@ -85,9 +129,65 @@ redo log file 有两个指针：
 
 相当于一个是读指针，一个是写指针，当 check point == write pos 时，表示日志满了，那么需要将 check point 后的部分数据刷盘，然后留出空间继续写
 
+<img src="https://pic.leetcode-cn.com/1606119295-YjpSrv-image.png" style="zoom:80%;" />
 
 
-<img src="https://pic4.zhimg.com/80/v2-b2a4003fde5ed1a12cfb9522235319ff_720w.jpg" style="zoom:60%;" />
+
+
+
+
+
+> #### redo log 和 undo log、回滚 的关系
+
+[redo log、undo log 和 回滚 -- 博客园](https://www.cnblogs.com/wyy123/p/7880077.html)
+
+[redo log 和 undo log -- 简书](https://www.jianshu.com/p/57c510f4ec28)
+
+
+
+**undo log 也是需要刷盘的**：因为 redo log 在宕机重启时也会恢复那些未提交的事务，然后需要再通过 undo log 回滚这些未提交的事务
+
+同时 undo log 必须在 对应写操作的 redo log 刷盘之前落盘，所以为了降低复杂性，redo log 将 undo log 当作写数据，将 undo log 也写入到磁盘中
+
+因此包含 undo log 的 redo log 是这样的，undo log 和 redo log 一一对应
+
+```java
+     记录1: <trx1, Undo log insert <undo_insert …>>	//undo log 记录旧值
+     记录2: <trx1, insert …>							//redo log 记录新值
+     记录3: <trx2, Undo log insert <undo_update …>>	
+     记录4: <trx2, update …>
+     记录5: <trx3, Undo log insert <undo_delete …>>
+     记录6: <trx3, delete …>
+```
+
+
+
+redo log 没有事务性，一旦某个事务 rollback 回滚了，redo log buffer 也不会删除掉该事务已经记录的写数据
+
+那么 redo log 中就保存着这些写操作，后续如果宕机恢复的话，不会是将已经回滚的事务给重新执行吗？
+
+**redo log 的解决方法：**
+
+```
+由于 回滚 实际上是利用 undo log 进行数据的写操作，所以回滚的操作也会被当作 redo log 记录下来
+所以当宕机利用 redo log 恢复的时候，按照顺序会先执行 redo log，然后再执行 回滚操作的 redo log
+```
+
+因此，包含了回滚操作的 redo log 是这样的，先是 undo log 和 redo log 一一对应，然后再记录回滚的所有操作
+
+这样在回滚时，就是先执行 redo log，然后再执行 回滚的 redo log
+
+```java
+     记录1: <trx1, Undo log insert <undo_insert …>>
+     记录2: <trx1, insert A…>
+     记录3: <trx2, Undo log insert <undo_update …>>
+     记录4: <trx2, update B…>
+     记录5: <trx3, Undo log insert <undo_delete …>>
+     记录6: <trx3, delete C…>
+     记录7: <trx3, insert C>
+     记录8: <trx2, update B to old value>
+     记录9: <trx1, delete A>
+```
 
 
 
@@ -158,16 +258,9 @@ mysql 将 redo log 刷回磁盘的完整状态分为两阶段
 
 
 
-因此需要使用两阶段提交：
+**因此需要使用两阶段提交：**
 
 Mysql 内部会将普通的事务当作一个 分布式事务 来处理，自动为每个事务分配一个唯一的 ID（XID），普通的事务 commit 被划分为 prepare 和 commit 两个阶段
 
-事务提交过程中发生宕机，数据库重启时，会顺序扫描 redo log 进行数据恢复，如果扫描到 redo log 标签为 prepare，那么就拿该 redo log 的 XID 去 binlog 中看 bin log 是否已经落盘，如果没有，那么该事务回滚（删除 redo log 和 bin log 数据），如果有，那么修改为 commit，并且将数据恢复
-
-将 redo log 和 bin log 按照状态详细拆分过程，如下：
-
-- redo log 已经刷盘，prepare 状态，但是 bin log 没有刷盘成功，那么将该事务已经刷盘成功的 redo log 和  未刷盘或者刷盘刷一半的 bin log 删除
-- redo log 已经刷盘，bin log 也刷盘
-  - redo log 事务状态已经从 prepare 修改为 commit，那么表示事务提交成功，不管了
-  - redo log 事务状态还没有修改为 commit，那么获取 bin log 的最后一个 xid 以及 redo log 中 prepare 状态的 xid，如果相同，那么意味着 bin log 也已经刷盘成功，将 redo log 的该事务修改为 commit；如果不同，那么将 redo log 和 bin log 多余的数据都删除 
+事务提交过程中发生宕机，数据库重启时，会顺序扫描 redo log 进行数据恢复，如果扫描到 redo log 标签为 prepare，那么就拿该 redo log 的 XID 去 binlog 中看 bin log 是否已经落盘，如果没有，那么该事务回滚（利用 undo log 回滚），如果有，那么表示事务成功了，不需要回滚
 

@@ -4,33 +4,23 @@
 
 
 
-> ### 乐观锁 和 悲观锁 的概念
+> #### 乐观锁 和 悲观锁 的概念
 
 
 
 **悲观锁：**
 
-将事物都想得很悲观，每个线程拿数据的时候都认为自己使用这个数据的期间别的线程都会进行修改，因此对这个数据加上锁，对别的线程进行排斥，比如 mysql 的写锁、表锁、行锁， 以及 java 中的  synchronized 和 ReentrantLock 等独占锁都是悲观锁的实现
-
-悲观锁适用于多写的环境，因为这样才保证每次只有一个线程在修改，确保了数据的准确性
+将事物都想得很悲观，每个线程拿数据的时候都认为自己使用这个数据的期间别的线程都会进行修改，因此对这个数据加上锁，对别的线程进行排斥，比如 mysql 的写锁、表锁、行锁， 以及 java 中的  synchronized 都是悲观锁的实现
 
 
 
 **乐观锁：**
 
-将事物都想得很乐观，每个线程获取数据的时候都认为别人不会修改，因此不会对数据加锁，只会在写数据的时候判断数据是否被修改过，像 数据库中的 加个字段的版本控制 和 另一种 CAS 算法 都是乐观锁的实现，而 java 中 `AtomicIntger` 等原子类就是 volatile 修饰的 int 变量 + CAS
-
-乐观锁不会对数据加锁，因此可以存在多个线程同时修改的情况，如果一直存在冲突，比如存在 n 个线程同时修改同个数据，那么最终只有一个线程会修改成功，其他的线程都需要进行自旋，获取最新的版本号进行重试，每次只有一个线程成功，效率过低
-
-因此乐观锁适用于多读的情况
+将事物都想得很乐观，每个线程获取数据的时候都认为别人不会修改，因此不会对数据加锁，只会在写数据的时候判断数据是否被修改过，像 数据库中的 加个字段的版本控制 和 另一种 CAS 算法 都是乐观锁的实现，而 java 中 `AtomicIntger` 等原子类就是 volatile 变量 + CAS
 
 
 
-> ### 乐观锁的两种实现
-
-
-
-这里需要说下，乐观锁在冲突的情况下，都需要进行自旋重试（重新获取版本号之类的，然后重新提交自己更新的数据）
+> #### 乐观锁的两种实现
 
 
 
@@ -61,33 +51,21 @@ CAS 即 compare And Swap（比较和交换）
 **CAS 的缺点：**
 
 - 存在 ABA 问题
-- 在存在冲突的情况下会自旋重试，而自旋的时候是不会主动放弃 CPU 的，那么当存在多个线程冲突的时候，CPU 效率低得一批
+- 在存在冲突的情况下会自旋重试，而自旋的时候是不会主动放弃 CPU 的，对于 CPU 来说压力大
 
 
 
-> ### 什么是 ABA 问题？
+> #### 什么是 ABA 问题？
 
 比如 线程 1  和 线程 2 同时要修改某个变量 x，当然，这是并发的，有先后顺序的，线程1 先被 CPU 调用，将 x 的值从 A 变成了 B，然后这时插进来 线程 3，CPU 没去调用线程 2，而是调用了 线程 3，而线程 3 将 x 的值 重新修改为 A，这时候 CPU 调用线程 2，线程 2 发现 x 在内存中的值 V 跟自己保存的旧值一样都是 A，那么感觉没人修改过，那么直接将 自己的新值 C 写入内存中
 
 但实际上，在 线程 2 修改之前，就已经存在两个线程对变量 x 进行了修改，只是最终改回了原来的值，让线程 2 无法感知到它的变化
 
-这就是 ABA 问题，表示从 A 修改为了 B，再从 B 修改回 A，这个中间过程不被感知
+这就是 ABA 问题，表示从 A 修改为了 B，再从 B 修改回 A，这个中间过程不被感
 
 
 
-举个生活例子：
-
-桌上有一杯水，它是满的，杯子的主人不在，当 人类 A 路过时，实在渴得不得了了，过来把它喝光了，然后就把空杯子放下走了
-
-然后过来一个人类 B，发现杯子空了，很不爽，就把自己随身携带的水给杯子满上，然后就走了
-
-当杯子的主人来的时候，看见杯子是满的，那么他不会想到有人喝了它的水再将它满上了，所以他放心地喝了
-
-当然，他在他不知情的情况下，喝下了别人炙热的口水
-
-
-
-> ### 如何 解决 ABA 问题？
+> #### 如何 解决 ABA 问题？
 
 通过添加一个版本号，（这就更像版本号控制那个了），之后的比较就不再是比较什么数据的内存值和旧值了，而是比较版本号了
 
@@ -95,7 +73,7 @@ CAS 即 compare And Swap（比较和交换）
 
 
 
-> ### ABA 问题有什么危害？
+> #### ABA 问题有什么危害？
 
 我们这么看老来，线程 1 修改了 x 值 从 A 变成 B，线程 3 又将 x 值从 B 变成 A，对于线程 2 来说，是需要将 x 值从 A 变成 C 的，那么这个 x 值最终是要变成 C 的，好像也没什么多大问题啊
 
@@ -132,7 +110,7 @@ AQS 全称为 AbstractQueuedSynchronizer，它是一个抽象类，意味着自�
 
 
 
-> ### acquire()
+> #### acquire()
 
 ```java
 public final void acquire(int arg) {
@@ -151,7 +129,7 @@ addWaiter() 是将线程封装为 Node 节点，然后内部调用 enq() 入队�
 
 
 
-> ### Node 入队 enq 代码
+> #### Node 入队 enq()
 
 
 
@@ -188,7 +166,7 @@ private Node enq(final Node node) {
 
 
 
-> ### Node 出队 acquireQueued 代码
+> #### Node 出队 acquireQueued()
 
 ```java
 final boolean acquireQueued(final Node node, int arg) {
@@ -210,8 +188,11 @@ final boolean acquireQueued(final Node node, int arg) {
                 failed = false;
                 return interrupted;
             }
-            if (shouldParkAfterFailedAcquire(p, node) &&
-                parkAndCheckInterrupt())
+            /*
+            shouldParkAfterFailedAcquire()：直译为 《获取锁失败了是否应该挂起线程》，该方法会判断是否需要挂起线程，一般情况下是会 return true 的，即需要挂起线程
+            parkAndCheckInterrupt()：该方法内部调用 park(this) 挂起线程，当 shouldParkAfterFailedAcquire() 为 true 时会进入该方法挂起线程，避免无意义的 CAS 自旋
+            */
+            if (shouldParkAfterFailedAcquire(p, node) && parkAndCheckInterrupt())
                 interrupted = true;
         }
     } finally {
@@ -228,7 +209,7 @@ AQS 有一个头节点 head，它单纯的作为一个 dummy 指针
 在队列中的节点通过 自旋来尝试 出队 逻辑，自旋过程如下：
 
 - 判断自己的前驱节点是否是 head，如果是，表示轮到自己进行尝试出队了（获取锁），那么调用 tryAcquire() 尝试出队
-  - 这里为什么 node 节点是队首节点却不能保证出队成功呢？因为有可能是非公平实现，那么可能其他线程插队率先操作成功
+  - **为什么 node 是头节点却不能保证出队成功呢**？因为有可能是非公平实现，那么可能其他线程插队率先操作成功
 - 当出队逻辑方法返回 true 后，调用 `setHead(node)` 方法，将 node 作为一个新的 dummy 节点
 
 
@@ -237,7 +218,130 @@ AQS 有一个头节点 head，它单纯的作为一个 dummy 指针
 
 
 
-> ### 用于公平锁中的 hasQueuedPredecessors()
+> #### 判断线程挂起 shouldParkAfterFailedAcquire()
+
+Node 节点的状态
+
+```java
+static final int CANCELLED =  1;	//线程因为中断或者超时而取消等待，即 node 是无效的
+static final int SIGNAL    = -1;	//线程处于唤醒状态，即活动状态
+static final int CONDITION = -2;	//线程节点 node 在 Condition 的等待队列中
+static final int PROPAGATE = -3;
+```
+
+
+
+```java
+private static boolean shouldParkAfterFailedAcquire(Node pre, Node node) {
+    //node 的前驱节点 pre 的节点状态
+    int ws = pre.waitStatus;
+
+    /*
+    	pre 节点处于 SIGNAL 状态，那么 node 节点可以放心的进行阻塞
+    	因为处于活动状态的 pre 后续可以唤醒 node
+    */
+    if (ws == Node.SIGNAL){
+        return true;
+    }
+    /*
+    	pre 的节点状态 > 0，从上面可以看到只有 CANCELLED 是 > 0 的
+    	因此 pre 节点由于 中断 或者 等待超时而无效了，那么 pre 节点就不能用来唤醒 node
+    	所以 while() 往前找，找到一个不是 CANCELLED 状态的节点，比如 preNode，然后将 preNode.next = node
+    	即舍弃掉所有的无效节点
+    	然后返回 false;
+    */
+    if (ws > 0) {
+        while (pred.waitStatus > 0){
+            node.prev = pre = pre.prev;
+        }
+        pre.next = node;
+    } else {
+        /*
+             * waitStatus must be 0 or PROPAGATE.  Indicate that we
+             * need a signal, but don't park yet.  Caller will need to
+             * retry to make sure it cannot acquire before parking.
+             */
+        /*
+        	到达这里，pre 的状态就是 0 或者 PROPAGATE 了
+        	通过 CAS 将 pre 节点状态设置为 SIGNAL
+        	然后返回 false;
+        	
+        	注意：这里的 ws = 0，只能是 pre 为 head 节点（dummy 节点）的时候
+        */
+        compareAndSetWaitStatus(pre, ws, Node.SIGNAL);
+    }
+    return false;
+}
+```
+
+对于上面可以会存在疑问，为什么 if-else 后不直接返回 true 将线程挂起，而是返回 false 呢？
+
+在注释中有这么一句话：
+
+```java
+Caller will need to retry to make sure it cannot acquire before parking
+```
+
+翻译过来就是：需要再重试一次 CAS 获取锁，确保当前线程在 park 之前是真的无法获取锁的
+
+返回 false，表示当前 for 循环不挂起线程，而在进行一次循环，如果还是不能够获取到锁，那么就将线程挂起，即再给当前线程一次机会，如果能够获取锁，那么就不需要挂起了
+
+
+
+> #### 唤醒线程 release()
+
+在 ReentrantLock 的 unlock() 中会调用 release()，释放资源
+
+同时调用 unparkSuccessor() 唤醒在 acquireQueued() 中挂起的线程
+
+```java
+public void unlock() {
+    sync.release(1);
+}
+```
+
+
+
+release() 方法如下：
+
+```java
+public final boolean release(int arg) {
+    //调用 tryRelease() 释放资源成功
+    if (tryRelease(arg)) {
+        Node h = head;
+        //调用 unparkSuccessor() 唤醒后继节点
+        if (h != null && h.waitStatus != 0)
+            unparkSuccessor(h);
+        return true;
+    }
+    return false;
+}
+
+private void unparkSuccessor(Node head) {
+   
+    int ws = head.waitStatus;
+    /*
+    	如果 head 的节点状态 ws < 0，表示在 上面的 shouldParkAfterFailedAcquire() 被 CAS 成了 SIGNAL = -1
+    */
+    if (ws < 0)
+        compareAndSetWaitStatus(head, ws, 0);
+
+    Node s = head.next;
+    if (s == null || s.waitStatus > 0) {
+        s = null;
+        //队列 从后往前找，找 waitStatus <= 0 可以唤醒的节点，一路一直更新 s，所以最终唤醒的还是排在前面的节点
+        for (Node t = tail; t != null && t != head; t = t.prev)
+            if (t.waitStatus <= 0)
+                s = t;
+    }
+    if (s != null)
+        LockSupport.unpark(s.thread);
+}
+```
+
+
+
+> #### 用于公平锁中的 hasQueuedPredecessors()
 
 ```java
 public final boolean hasQueuedPredecessors() {
@@ -266,15 +370,19 @@ public final boolean hasQueuedPredecessors() {
 
 ## 3、ReentrantLock
 
-**ReentrantLock = AQS + tryAcquire() + tryRelease()**
+**ReentrantLock = AQS + tryAcquire() + tryRelease() + CAS**
 
 ReentrantLock 的一个内部类 Sync继承了 AQS，同时重写了 AQS 的 tryAcquire() 和 tryRelease() 方法，通过重写这两个方法，制定了这两个方法所代表的含义：获取锁 和 释放锁
 
-并且 ReentrantLock 内部自己定义了两个方法 lock() 和 unlock() ，其实这两个方法内部调用的是 tryAcquire() 和 tryRelease() ，只是通过 lock() 和 unlock() 将它们封装起来，使得看起来更像是一把锁而已
+ReentrantLock 内部自己定义了两个方法 lock() 和 unlock() ，这两个方法实际上是对 tryAcquire() 和 tryRelease() 的封装而已，通过 lock() 这个方法名使得它更像一把锁
 
 
 
-> ### 公平锁 和 非公平锁 实现类
+ReentrantLock 是 乐观锁 + 悲观锁，在最开始调用 lock() CAS 失败了不会直接 park 挂起线程，而是会在同步队列中自旋一两次，如果能够获取锁则直接出队，如果不能则再挂起，让前驱节点来唤醒，避免多余的自旋
+
+
+
+> #### 公平锁 和 非公平锁 实现类
 
 ```java
 public class ReentrantLock implements Lock {
@@ -295,7 +403,7 @@ public class ReentrantLock implements Lock {
 
 
 
-> ### lock()
+> #### lock()
 
 ```java
 final void lock() {
@@ -319,7 +427,7 @@ public final void acquire(int arg) {
 
 
 
-> ### tryAcquire()
+> #### tryAcquire()
 
 ```java
 final boolean tryAcquire(int acquires) {
@@ -352,7 +460,7 @@ ReentrantLock 实现锁的逻辑就是通过赋予 tryAcquire() 不同的语义�
 
 
 
-> ### tryRelease()
+> #### tryRelease()
 
 ```java
 protected final boolean tryRelease(int releases) {
@@ -375,7 +483,7 @@ protected final boolean tryRelease(int releases) {
 
 
 
-> ### 公平锁获取锁 tryAcquire() 的逻辑
+> #### 公平锁获取锁 tryAcquire() 的逻辑
 
 ```java
 protected final boolean tryAcquire(int acquires) {
@@ -408,104 +516,99 @@ protected final boolean tryAcquire(int acquires) {
 
 
 
-## 4、Condition 机制
+## 4、AQS 的 Condition 机制
 
-> ### Condition 的介绍
+> #### Condition 的介绍
 
 Condition 是一个接口， AQS 一个内部类 ConditionObject 实现了 Condition 接口，`lock.newCondition()` 实际上是创建了一个 ConditionObject 对象。
 
-ConditionObject 类内部复用了 AQS 的 Node 类，内部维护了一个 条件队列
-
 ```java
-public class ConditionObject implements Condition {
-    //条件队列头尾节点
-    private transient Node firstWaiter;
-    private transient Node lastWaiter;
+final ConditionObject newCondition() {
+    return new ConditionObject();
 }
 ```
 
-一个 Condition 对象对应一个 条件队列
-
-在条件队列中的节点都是 lock() 获取到锁后调用 await() 就会将线程封装为一个 Node，然后添加到条件队列中
-
-在条件队列中的节点需要使用 signal() 唤醒，然后将节点调用 enq() 添加到同步队列中
+一个 Condition 对象内部维护一个等待队列，因此可以通过定义两个 Condition 对象来维护 生产者 和 消费者 两个线程等待队列
 
 
 
-总的来说，**AQS 存在两种队列：同步队列 和 条件队列**
+> #### Condition 的 await() 和 signal()
 
-同步队列存储的是竞争获取锁的节点
-
-条件队列存储的是由于某种原因释放锁，然后进入阻塞状态，等待别的线程唤醒的节点，它被别的线程唤醒后，需要放入到同步队列中，重新跟其他线程一起竞争锁
-
-
-
-> ### await()
+await() 方法逻辑：
 
 ```java
 public final void await() throws InterruptedException {
-    
-    //将线程添加到 条件队列
+    if (Thread.interrupted())
+        throw new InterruptedException();
+    //将线程封装为一个 Node，然后存储到 Condition 维护的等待队列中
     Node node = addConditionWaiter();
-    //释放锁，state - 1
+    //释放线程持有的 state 资源，内部会调用 tryRealease()，如果当前线程不是持有锁的线程，那么会抛出异常
     int savedState = fullyRelease(node);
-    
-    //节点不在 AQS 的同步队列中
+    int interruptMode = 0;
+    /*
+    这里是一个 while 循环，类似生产者消费者模式中的 while 用法
+    isOnSyncQueue()：判断 node 是否在 AQS 的同步队列中
+    第一次调用肯定是不在同步队列中的，而是在等待队列中，因此会进入到循环体，然后会挂起线程
+    注意，此时外面调用 await() 的时候，由于线程在这里挂起了，所以会阻塞在 await() 方法位置，不会往下执行
+    后面等 signal() 调用 unpark() 唤醒，接下来先转到 signal() 方法逻辑
+    */
     while (!isOnSyncQueue(node)) {
         //挂起线程
         LockSupport.park(this);
-        //如果是 signal() 唤醒的，那么退出循环
-        if ((interruptMode = checkInterruptWhileWaiting(node)) != 0)
-            break;
     }
-    //上面退出循环，表示 node 已经在 AQS 队列中了，那么调用 acquireQueued() 竞争锁
-    acquireQueued(node, savedState);
+    /*
+    	当其他线程调用了 signal() 后，该线程属于被唤醒的一个，那么在 signal() 中加入了同步队列，因此在上面退出了 while
+    	这里线程已经在同步队列中了，但是还没有获取锁
+    	这里调用 acquireQueued() 来 CAS 竞争获取锁，当获取锁后，那么退出 await() 继续执行代码
+    */
+    if (acquireQueued(node, savedState) && interruptMode != THROW_IE)
+        interruptMode = REINTERRUPT;
+    if (node.nextWaiter != null) // clean up if cancelled
+        unlinkCancelledWaiters();
+    if (interruptMode != 0)
+        reportInterruptAfterWait(interruptMode);
 }
 ```
 
 
 
-> ### signal()
+signal() 方法逻辑：
 
 ```java
 public final void signal() {
+    //如果调用该方法的线程 不持有锁，那么抛出异常，这是一个重点
+    if (!isHeldExclusively())
+        throw new IllegalMonitorStateException();
+    
     Node first = firstWaiter;
     if (first != null)
+        //调用 doSignal() 唤醒等待队列中第一个等待的节点
         doSignal(first);
 }
 
 private void doSignal(Node first) {
-    //这里就只让一个节点入队到 同步队列中，然后唤醒对应的线程让它去竞争锁
     do {
+        //firstWaiter = first.nextWaiter 这里相当于是将节点从等待队列中移除 
         if ( (firstWaiter = first.nextWaiter) == null)
             lastWaiter = null;
         first.nextWaiter = null;
-    } while (!transferForSignal(first) &&	////唤醒线程
+        //调用 transferForSignal() 唤醒等待的节点
+    } while (!transferForSignal(first) &&
              (first = firstWaiter) != null);
-}
-private void doSignalAll(Node first) {
-    //这里让所有的节点入队到 同步队列 中，然后唤醒所有的线程，让它们去竞争锁
-    lastWaiter = firstWaiter = null;
-    do {
-        Node next = first.nextWaiter;
-        first.nextWaiter = null;
-        //唤醒线程
-        transferForSignal(first);
-        first = next;
-    } while (first != null);
 }
 
 final boolean transferForSignal(Node node) {
 
     if (!compareAndSetWaitStatus(node, Node.CONDITION, 0))
         return false;
-    //将节点放入到同步队列中
+	//将节点加入到 AQS 的同步队列中
     Node p = enq(node);
     int ws = p.waitStatus;
     if (ws > 0 || !compareAndSetWaitStatus(p, ws, Node.SIGNAL))
         /*
-        唤醒线程，这样它在 await() 中就会醒来，发现在同步队列中了就会开始竞争锁
-        具体看 await() 的方法尾
+        调用 unpark() 唤醒线程，此时线程会在 await() 的 while 循环中醒来，
+        然后发现节点已经在同步队列中了，因此退出循环，不再挂起
+        这里转到 await() 方法中
         */
         LockSupport.unpark(node.thread);
     return true;
@@ -514,9 +617,15 @@ final boolean transferForSignal(Node node) {
 
 
 
+
+
 ## 5、Semaphore
 
-> ### 信号量的作用
+> #### 信号量的作用
+
+Sync 锁 和 Lock 都是信号量的特殊情况：只有一个可用资源
+
+
 
 Semaphore 可以类比为停车场的位置，即可以停车的车辆，每个停车场首先都会设置好各个车位的位置，车位数就是可用资源数，来一辆车就获取一个车位，即可用资源数 -1
 
@@ -532,58 +641,59 @@ Semaphore semaphore = new Semaphore(10);
 
 
 
-当调用 semaphore.acquire() 时，表示申请一个可用资源数，如果可用资源数不为 0 时，那么可以直接获取，如果可用资源数为 0，那么线程会阻塞住，直到别的线程归还资源
+semaphore.acquire() ，表示申请一个可用资源数，如果可用资源数不为 0 时，那么可以直接获取，如果可用资源数为 0，那么线程会阻塞住，直到别的线程归还资源
 
-当线程调用 semaphore.release() 时，表示归还可用资源，这时其他申请资源的阻塞线程就可以停止阻塞状态，获取资源，
-
-
-
-**注意：**Semaphore 存在多个线程同时获取执行权，这意味着存在多个线程会操作同个共享内存，而 Semaphore 中的 volatile state 只能保证可见性，保证不了原子性，因此需要针对某些情况进行处理
+semaphore.release() ，表示归还资源，这时其他申请资源的阻塞线程就可以停止阻塞状态，获取资源
 
 
 
-> ### 信号量实现原理
+> #### 信号量实现原理
 
-Semaphore 是基于 AQS 实现的，即使用 同步队列 + CAS
+Semaphore 基于 AQS 实现
 
-看到这里，很容易想到我们 new Semaphore(x) 的时候传参传进去的 x 是 Semaphore 内部维护的一个值 available，表示当前可用资源数，类似 ReentrantLock 内部的 state，只不过 state 是表示锁的状态
+最开始 new Semaphore(x) 指定可用资源数
 
-同时，Semaphore 由于是基于 AQS，因此同时存在 公平锁 和 非公平锁两种，上面讲过公平锁和非公平锁了，这里就不具体讲了，具体的实现也差不多
+同时，Semaphore 由于是基于 AQS，因此同时存在 公平锁 和 非公平锁两种
 
 
 
-尝试获取资源：acquire() ，如果失败就封装成 Node 进入同步队列自旋
+尝试获取资源：acquire() ，如果失败就封装成 Node 进入同步队列自旋，逻辑基本都跟 ReentrantLock 一样
 
 ```java
 public final void acquireSharedInterruptibly(int arg)
-            throws InterruptedException {
-    //尝试进行 CAS 获取资源，如果获取失败，那么入队
+    throws InterruptedException {
+    // CAS 获取失败，那么入队
     if (tryAcquireShared(arg) < 0)
         doAcquireSharedInterruptibly(arg);
 }
 private void doAcquireSharedInterruptibly(int arg)
     throws InterruptedException {
-    //调用 addWaiter() 进入同步队列
+    //将线程封装成 Node 放入同步队列
     final Node node = addWaiter(Node.SHARED);
+    boolean failed = true;
     try {
+        //自旋
         for (;;) {
-            //获取 node 前置节点
             final Node p = node.predecessor();
-            //该节点为头节点
             if (p == head) {
                 //尝试获取资源
                 int r = tryAcquireShared(arg);
                 if (r >= 0) {
-                    //资源获取成功，那么解放线程，将该节点作为头节点
                     setHeadAndPropagate(node, r);
                     p.next = null; // help GC
                     failed = false;
                     return;
                 }
             }
+            //park 挂起线程
+            if (shouldParkAfterFailedAcquire(p, node) &&
+                parkAndCheckInterrupt())
+                throw new InterruptedException();
         }
-    } 
-    
+    } finally {
+        if (failed)
+            cancelAcquire(node);
+    }
 }
 
 protected int tryAcquireShared(int acquires) {
@@ -596,7 +706,7 @@ final int nonfairTryAcquireShared(int acquires) {
         int available = getState();
         //减去需要的资源数
         int remaining = available - acquires;
-        //CAS 设置剩余资源数
+        //如果可用资源 - 需要的资源数 < 0 或者 CAS 失败了，那么表示获取资源不成功，进入下一个循环
         if (remaining < 0 ||
             compareAndSetState(available, remaining))
             return remaining;
@@ -606,9 +716,44 @@ final int nonfairTryAcquireShared(int acquires) {
 
 
 
+release()：
+
+```java
+public void release() {
+    sync.releaseShared(1);
+}	
+public final boolean releaseShared(int arg) {
+    if (tryReleaseShared(arg)) {
+        doReleaseShared();
+        return true;
+    }
+    return false;
+}
+private void doReleaseShared() {
+    for (;;) {
+        Node h = head;
+        if (h != null && h != tail) {
+            int ws = h.waitStatus;
+            if (ws == Node.SIGNAL) {
+                if (!compareAndSetWaitStatus(h, Node.SIGNAL, 0))
+                    continue;            // loop to recheck cases
+                //唤醒在同步队列中 park 挂起的线程
+                unparkSuccessor(h);
+            }
+            else if (ws == 0 &&
+                     !compareAndSetWaitStatus(h, 0, Node.PROPAGATE))
+                continue;                // loop on failed CAS
+        }
+        if (h == head)                   // loop if head changed
+            break;
+    }
+}
+
+```
 
 
-> ### Semaphore 需要注意的点
+
+> #### Semaphore 需要注意的点
 
 acquire() 和  release() 应该是配套使用的，因为可以无限制的调用 release()，即会归还不存在的资源，导致错误
 
@@ -645,7 +790,7 @@ CountdownLatch 内部肯定也是 Syn 继承 AQS 实现，主要是来什么思�
 
 
 
-> ### await()
+> #### await()
 
 ```java
 public void await() throws InterruptedException {
@@ -654,11 +799,11 @@ public void await() throws InterruptedException {
 
 public final void acquireSharedInterruptibly(int arg)
     throws InterruptedException {
-    //if() return -1 的话就进入方法体，即仍然还需要等待线程
+    //如果等待的线程数不够，那么进入同步队列中等待
     if (tryAcquireShared(arg) < 0)
         doAcquireSharedInterruptibly(arg);
 }
-//判断已经完成的线程数是不是满足需要等待的线程数，即 state == 0；return 1 相当于 return true
+//判断已经调用 countdown() 的线程数是不是已经到达指定的线程数，如果是表示等待完毕，可以执行
 protected int tryAcquireShared(int acquires) {
     return (getState() == 0) ? 1 : -1;
 }
@@ -684,6 +829,7 @@ private void doAcquireSharedInterruptibly(int arg)
                     return;
                 }
             }
+            //挂起线程
             if (shouldParkAfterFailedAcquire(p, node) &&
                 parkAndCheckInterrupt())
                 throw new InterruptedException();
@@ -697,7 +843,7 @@ private void doAcquireSharedInterruptibly(int arg)
 
 
 
-> ### countdown()
+> #### countdown()
 
 ```java
 public void countDown() {
@@ -705,27 +851,34 @@ public void countDown() {
     sync.releaseShared(1);
 }
 public final boolean releaseShared(int arg) {
-    //if() 内 CAS 释放资源
+    /*
+    tryReleaseShared() 用于 CAS 将 state -1
+    如果成功了，那么有可能到达的线程数够了，需要唤醒 AQS 中的 await() 线程了因此调用 doReleaseShared() 唤醒线程
+    */
     if (tryReleaseShared(arg)) {
-        //只有上面的 if() 为 true 进入这个方法体，这个方法目前没有什么实质意义
         doReleaseShared();
         return true;
     }
     return false;
 }
-/*
-CAS 释放资源，这里使用 for() 的原因是可能存在线程竞争，一次只能有一个释放成功
-当发现 c == 0，表示需要等待的线程数已经达到了，当前线程无需等待了，直接 return false
-后面 return next == 0，只有为 0 的时候才 return true。其他情况都 return false;
-*/
-protected boolean tryReleaseShared(int releases) {
+
+private void doReleaseShared() {
     for (;;) {
-        int c = getState();
-        if (c == 0)
-            return false;
-        int nextc = c-1;
-        if (compareAndSetState(c, nextc))
-            return nextc == 0;
+        Node h = head;
+        if (h != null && h != tail) {
+            int ws = h.waitStatus;
+            if (ws == Node.SIGNAL) {
+                if (!compareAndSetWaitStatus(h, Node.SIGNAL, 0))
+                    continue;            // loop to recheck cases
+                //唤醒同步队列中等待的线程，实际上在这里就是 调用 await() 的线程
+                unparkSuccessor(h);
+            }
+            else if (ws == 0 &&
+                     !compareAndSetWaitStatus(h, 0, Node.PROPAGATE))
+                continue;                // loop on failed CAS
+        }
+        if (h == head)                   // loop if head changed
+            break;
     }
 }
 ```
@@ -738,7 +891,7 @@ CyclicBarrier 是用来多个线程一起在某个点进行等待其他线程的
 
 CyclicBarrier 是可以进行复用的，即内部自动会将等待线程数归位，就跟赛跑等到 5 个人跑，5 个人跑出去了，就继续等待下一组 5 个人到齐跑
 
-CyclicBarrier 使用 ReentrantLock + Condition 实现，内部维护了一个 ReentrantLock 和 Condition 和 Generation
+CyclicBarrier 使用 ReentrantLock + Condition + Generation 实现
 
 ```java
 public class CyclicBarrier {
@@ -756,11 +909,15 @@ public class CyclicBarrier {
 }
 ```
 
+
+
 CyclicBarrier 只有一个主要 api：await()
 
+当调用 barrier.await() 的线程不是最后一个线程时，那么它会调用 Condition 的 await() 进入等待队列中，然后在 while() 处调用 park 挂起，直到最后一个线程调用了 barrier.await() 时，它发现自己是最后一个线程，那么调用 condition 唤醒所有的线程，然后在 finally 的 unlock() 释放锁，此时各个线程被唤醒后会一个个进入 同步队列，然后按照顺序获取锁，当获取到锁时，出队，然后回到 await() 调用处，停止了阻塞，等待完毕，unlock() 释放锁，让别的线程去获取锁然后出队。。。直到所有的线程都出队了，完成任务
 
 
-> ### await()
+
+> #### await()
 
 ```java
 public CyclicBarrier(int parties) {
@@ -807,17 +964,21 @@ TimeoutException {
                 ranAction = true;
                 //唤醒所有的线程，并且重置为一个新的代
                 nextGeneration();
+                //返回
                 return 0;
             } finally {
                 if (!ranAction)
                     breakBarrier();
             }
         }
-		//没有进入上面的 index == 0，表示不是最后一个线程
+		/*
+		分割线--------------------------------------------------------------
+		没有进入上面的 index == 0，表示不是最后一个线程
+		*/
         for (;;) {
             try {
-                //没有设置阻塞时间，那么直接进入 Condition 的条件队列中等待
                 if (!timed)
+					//进入 condition 的等待队列中等待，同时释放锁
                     trip.await();
                 else if (nanos > 0L)
                     nanos = trip.awaitNanos(nanos);
@@ -832,7 +993,6 @@ TimeoutException {
 
             if (g.broken)
                 throw new BrokenBarrierException();
-			//重置为 新的代了，表示等待的线程数已经足够了，那么退出循环
             if (g != generation)
                 return index;
 
@@ -850,7 +1010,7 @@ TimeoutException {
 
 
 
-> ### Generation 废弃 和 更新
+> #### Generation 废弃 和 更新
 
 ```java
 //创建一个新的代
@@ -888,3 +1048,13 @@ public void reset() {
     }
 ```
 
+
+
+## 8、Semaphore、CountDownLatch、CyclicBarrier 的运行情况总结
+
+Semaphore、CountDownLatch、CyclicBarrier 都跟 AQS 有关
+
+- Semaphore 不涉及锁，只存在 CAS，它存在多个共享资源，当一个线程调用 acquire() 获取不到资源时，那么就会进入到同步队列中等待，挂起，直到有线程调用 release() 释放资源了，再去同步队列中唤醒它
+
+- CountDownLatch 不涉及锁，只存在 CAS，调用 await() 的线程会进入同步队列中等待，挂起，每当有一个线程调用 countdown() 的时候，都会调用 unpark() 来唤醒线程，而被唤醒的线程不会出队，因为 state != 0，当最后一个线程调用了 countdown() 后唤醒线程，被唤醒的线程调用 tryAcqure() 时发现 state == 0，因此可以出队了，那么停止阻塞等待，回到原位置继续执行
+- CyclicBarrier  涉及到 ReentrantLock 和 Condition，它存在一个 Generation，用来表示当前的周期，当一个线程调用 barrier 的 await() 时，它会先 lock() 获取锁，当获取成功了，如果它不是最后一个等待的线程，那么会调用 condition 的 await() 进入等待队列中 park 挂起，同时会释放锁。如果它是最后一个等待的线程，那么它会唤醒等待队列中的线程，让它们进入到同步队列中，然后更新 Generation 进入到下一个周期，同时 unlock() 释放锁，让同步队列中的线程一个个出队，结束等待

@@ -189,9 +189,7 @@ class B{
 
 ## 5、直接内存（非 JVM 内存，堆外内存）
 
-**我们需要先明白什么是堆内内存，什么是堆外内存？**
-
-（具体看 [Java直接内存是属于内核态还是用户态](https://www.zhihu.com/question/376317973/answer/1052239674)）
+**我们需要先明白什么是堆内内存，什么是堆外内存？**[Java直接内存是属于内核态还是用户态](https://www.zhihu.com/question/376317973/answer/1052239674)
 
 堆内内存就是 JVM 内存，它是受 JVM 管理的，也就是**一个进程所持有的内存**，它位于用户态中
 
@@ -201,7 +199,7 @@ class B{
 
 
 
-直接内存的分配方式有 2 种：
+**直接内存的 2 种分配方式：**
 
 - 使用 NIO 包下的 ByteBuffer 的 ByteBuffer.DirectByteBuffer()
 - 使用 unsafe.allocateMemory()
@@ -209,9 +207,9 @@ class B{
 这里说下 ByteBuffer ，它能够分配两种内存：堆内存 和 直接内存，但是实际上 ByteBuffer 的 allocateDirect() 内部也是调用unsafe.allocateMemory() 来实现的
 
 ```java
-//1、创建堆内存，内部直接 new byte[]
+//1、分配堆内存，直接 new byte[]
 ByteBuffer heapBuffer = ByteBuffer.allocate(1024);
-//2、创建直接内存，内部调用 unsafe 的 allocateMemory()
+//2、分配直接内存，内部调用 unsafe 的 allocateMemory()
 ByteBuffer directBuffer = ByteBuffer.allocateDirect(1024);
 
 //3、利用 unsafe 分配直接内存，返回直接内存的起始地址，这个地址是虚拟地址
@@ -222,7 +220,7 @@ unsafe.freeMemory(l);
 
 
 
-**两种内存分配方式的区别：**
+**2 种内存分配方式的区别：**
 
 ByteBuffer 内部是封装了 unsafe ，利用 unsafe 来分配直接内存，但是它通过一个 DirectByteBuffer 的 OOP 的对象来管理这个堆外内存，它内部没有提供释放直接内存的 api，所以是 GC 在回收该对象时，会自动将直接内存释放，即变相的由 JVM 进行管理
 
@@ -242,13 +240,17 @@ public native long allocateMemory(long var1);
 
 **使用直接内存（堆外内存）的好处：**
 
-当一个 Java 程序读取一个磁盘文件的时候，需要经过 磁盘-> 内核->堆外->堆内 的拷贝，这个堆内内存就是我们读取数据时申请的 byte 数组
+当一个 Java 程序读取一个磁盘文件的时候，需要经过 磁盘-> 内核->堆外->堆内 的拷贝，**这个堆内内存就是我们申请的 byte 数组**
 
 而如果使用 堆外内存 的 byte 数组来代替 堆内内存的 byte 数组，Java 程序能够直接读写这个内存，那么就省去了 堆外-> 堆内 的拷贝，只需要 磁盘-> 内核->堆外->堆内 的拷贝，**好处是 减少了一次拷贝，同时这个 byte 数组不在堆中，减轻了 GC 的压力**
 
 ```java
 在 Netty 的 NIO 中使用的都是 ByteBuffer 返回的封装了分配的堆外内存 的 DirectByteBuffer 对象
 ```
+
+
+
+当然，如果使用零拷贝技术，那么就可以直接在内核态操作数据，就不需要经历 内核->堆外->堆内 的过程了，减少了两次拷贝 和 用户态和内核态的切换
 
 
 

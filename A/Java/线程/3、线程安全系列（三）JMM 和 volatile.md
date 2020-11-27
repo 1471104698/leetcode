@@ -26,9 +26,11 @@ JMM 规定了 内存只要有两种：主存 和 工作内存
 
  [内存屏障及其在 JVM 内的应用（下） - 知乎 (zhihu.com)](https://zhuanlan.zhihu.com/p/137460543) 
 
+[上面文章的视频讲解 -- B站](https://www.bilibili.com/video/BV1X54y1Q75J)
 
 
-volatile 只能保证可见性，不能保证原子性，因为 volatile 不能禁止多个 CPU 核心同时持有 volatile 变量
+
+volatile 只能保证可见性，不能保证原子性，因为 **volatile 不能禁止多个 CPU 核心同时持有 volatile 变量**
 
 ```java
 volatile 保证可见性是通过 happens-before 规则实现
@@ -38,6 +40,19 @@ volatile 保证可见性是通过 happens-before 规则实现
 由于 CPU 的 StoreBuffer 和 无效队列 的原因 导致了内存可见性问题
 
 使用 volatile 它会自动添加 **内存屏障**（具体看 CPU 缓存一致性就知道了）
+
+
+
+关于 volatile 内存屏障 -- 辟谣：
+
+```java
+对于 volatile 可见性 常见的说法：
+【volatile 写后会将数据强制刷新会主存，volatile 读每次都是从主存中读】
+
+这实际上存在很大的问题，因为完全不需要刷新回主存就能够保证可见性了，只需要从 StoreBuffer 刷新回 cache，剩下的由 MESI 协议来保证可见性就可以了
+并且读如果需要强制从主存中读，这不就跟对 volatile 禁用缓存一个样么，cache line 中无论 volatile 变量是否有效都去主存读，这可能么？
+我不认为设计者这么强会没有考虑到这一点
+```
 
 
 

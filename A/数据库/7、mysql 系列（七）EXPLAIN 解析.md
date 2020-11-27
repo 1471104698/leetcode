@@ -105,15 +105,12 @@ EXPLAIN select u.id from user u left join user u1 on u.a = u1.a;
 | ------------------------ | ------------------------------------------------------------ |
 | Using filesort           | 将用外部排序而不是按照索引顺序排列结果，数据较少时从内存排序，否则需要在磁盘完成排序，代价非常高，**需要添加合适的索引** |
 | Using temporary          | 需要创建一个临时表来存储结果                                 |
-| Using index              | 查询使用了覆盖索引，不需要回表，即不需要访问数据，单单索引树节点就可以满足要求 |
-| Using where              | 存在 where 条件查询，需要根据 where 条件对查询的数据进行筛选 |
+| Using index              | 使用了覆盖索引，即 select 的字段 和 where 条件都是在联合索引树上的，不需要回表查询所有字段值然后再进行匹配筛选 |
+| Using where              | 存在 where 条件查询，在 Server 层对存储引擎层返回的数据根据 where 的其他条件进行筛选 |
 | Using where，Using index | 查找使用了覆盖索引，并且存在 where 条件查询，需要进行筛选    |
+| Using index condiyion    | 索引下推，用于联合索引，减少存储引擎层的回表次数             |
 
 
-
-> ### Using Index 和 Using where：
-
-[Using index 和 Using where 的解释](<https://segmentfault.com/q/1010000004197413>)
 
 
 

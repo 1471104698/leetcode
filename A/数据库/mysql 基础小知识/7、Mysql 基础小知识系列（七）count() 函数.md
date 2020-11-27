@@ -16,6 +16,22 @@ count() 函数用于统计行数
 
 
 
+> #### count(1) 和 group by 一起使用
+
+当 count() 没有跟 group by 使用时，那么统计的是整个表的数据
+
+<img src="https://pic.leetcode-cn.com/1606454120-QRlKlC-image.png" style="zoom:90%;" />
+
+当 count() 跟 group by 使用时，那么统计的是 group by 每个分组的信息
+
+<img src="https://pic.leetcode-cn.com/1606454058-KyLMOe-image.png" style="zoom:80%;" />
+
+因此，count() 实际上是对分组进行统计，**在没有使用 group by 的情况下，count() 将整张数据表当作一个分组**
+
+而当使用了 group by 后，count() 就是按照分组进行统计
+
+
+
 > ####  count(1) 和 order by 1 的区别
 
 order by 1, 2 这种表示先 按照第 1 列排序，再按照第 2 列排列，1 和 2 都是表示对应的列
@@ -26,13 +42,11 @@ order by 1, 2 这种表示先 按照第 1 列排序，再按照第 2 列排列�
 
 
 
-但是，如果我们 count(列名)，那么就是表示按照某个字段来进行查询行数，它会忽略掉 查询列的列值值为 NULL 的行数，即如果 10 行数据中 查询列名 有 3 行数据为 NULL，那么 count(列名) 得到的结果为 7
+> ####  count(column) 和 count(distinct column(s)) 
 
+count(column)：表示按照某个字段来进行查询行数，它会忽略掉 查询列值为 NULL 的行数
 
-
-> ####  关于 count(distinct column(s)) 函数
-
- count(distinct column(s)) 表示查找所指 列 都不为 NULL 的行数，并且会将相同的数据行进行去重
+ count(distinct column(s)) ：表示查找多个列 都不为 NULL 的行数，并且会将相同的数据行进行去重
 
 存在以下表数据：
 

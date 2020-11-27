@@ -8,6 +8,7 @@
 FROM ->
 WHERE -> 
 GROUP BY -> 
+COUNT ->
 SELECT -> 
 HAVING -> 
 DISTINCT -> 

@@ -175,6 +175,72 @@ AbstractPlatformTransactionManager.doGetTransaction->
 
 
 
+事务拦截器的拦截方法，此处是事务的入口，内部深入就是事务的创建：
+
+```java
+@Nullable
+protected Object invokeWithinTransaction(Method method, @Nullable Class<?> targetClass,
+                                         final InvocationCallback invocation) throws Throwable {
+
+
+    if (txAttr == null || !(ptm instanceof CallbackPreferringPlatformTransactionManager)) {
+        TransactionInfo txInfo = createTransactionIfNecessary(ptm, txAttr, joinpointIdentification);
+
+        Object retVal;
+        try {
+            //执行事务
+            retVal = invocation.proceedWithInvocation();
+        }
+        catch (Throwable ex) {
+            /*
+                发生异常，比如在 方法存在 int i = 1 / 0，
+                那么这里捕获异常并且调用 completeTransactionAfterThrowing() 回滚事务，
+                并且为了让上层知道发生了什么异常，还需要再将异常抛出 throw ex;
+                */
+            completeTransactionAfterThrowing(txInfo, ex);
+            throw ex;
+        }
+        finally {
+            cleanupTransactionInfo(txInfo);
+        }
+
+        if (vavrPresent && VavrDelegate.isVavrTry(retVal)) {
+            // Set rollback-only in case of Vavr failure matching our rollback rules...
+            TransactionStatus status = txInfo.getTransactionStatus();
+            if (status != null && txAttr != null) {
+                retVal = VavrDelegate.evaluateTryFailure(retVal, txAttr, status);
+            }
+        }
+
+        commitTransactionAfterReturning(txInfo);
+        return retVal;
+    }
+}
+
+protected void completeTransactionAfterThrowing(@Nullable TransactionInfo txInfo, Throwable ex) {
+    
+    if (txInfo.transactionAttribute != null && txInfo.transactionAttribute.rollbackOn(ex)) {
+        try {
+            //调用 rollback() 回滚事务
+            txInfo.getTransactionManager().rollback(txInfo.getTransactionStatus());
+        }
+        catch (TransactionSystemException ex2) {
+            logger.error("Application exception overridden by rollback exception", ex);
+            ex2.initApplicationException(ex);
+            throw ex2;
+        }
+        catch (RuntimeException | Error ex2) {
+            logger.error("Application exception overridden by rollback exception", ex);
+            throw ex2;
+        }
+    }
+}
+```
+
+
+
+
+
 getTransaction() 逻辑如下：
 
 ```java

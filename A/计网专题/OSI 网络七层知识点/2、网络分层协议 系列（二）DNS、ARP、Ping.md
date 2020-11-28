@@ -102,7 +102,7 @@ DNS 规定了两种 DNS 服务器，一种叫主 DNS 服务器，一种叫辅助
 
 > ### 4、DNS 劫持
 
- http://www.hackdig.com/?01/hack-1196.htm 
+[DNS 劫持](http://www.hackdig.com/?01/hack-1196.htm)
 
 
 

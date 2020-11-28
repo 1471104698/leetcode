@@ -36,7 +36,7 @@ public @interface Configuration {
 
 如果 proxyBeanMethods = false，那么 @Configuration 注解的类就是一个 Lite 类，不会创建 代理对象
 
-当然默认情况下为 true
+当然**默认情况下为 true**
 
 
 

@@ -81,7 +81,7 @@ eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJmcm9tX3VzZXIiOiJCIiwidGFyZ2V0X3VzZXIiOiJ
 
 
 
-> ### 签名的作用
+> #### 签名的作用
 
 签名的作用是为了防止别人篡改伪造 JWT，比如当中间人篡改了 payload，然后使用相同的 散列算法生成 signature，
 
@@ -97,7 +97,7 @@ eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJmcm9tX3VzZXIiOiJCIiwidGFyZ2V0X3VzZXIiOiJ
 
 ![preview](https://pic3.zhimg.com/v2-f1556c71042566d4a6f69ee20c2870ae_r.jpg)
 
-> ### 信息暴露
+> #### 信息暴露
 
 我们可以发现，JWT 中的 Header 和 Payload 相当于是明文传输，因此 JWT 不用来存储敏感信息，一般就是存储用户的 id
 

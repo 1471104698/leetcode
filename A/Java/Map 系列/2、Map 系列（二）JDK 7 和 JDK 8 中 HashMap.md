@@ -2,7 +2,7 @@
 
 
 
-## 1、table 初始化时机
+## 1、table 初始化时机（了解即可）
 
 ```java
 HashMap<Integer, Integer> map = new HashMap<>();
@@ -276,7 +276,7 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
     //如果还没初始化就初始化
     if ((tab = table) == null || (n = tab.length) == 0)
         n = (tab = resize()).length;
-    //如果插入到bulkindex对应的table的slot还没有值，那么直接将(K,V)封装的newNode对象赋给tab[i]
+    //如果插入到 index 对应的table的slot还没有值，那么直接将(K,V)封装的newNode对象赋给tab[i]
     if ((p = tab[i = (n - 1) & hash]) == null)
         tab[i] = newNode(hash, key, value, null);
     else {

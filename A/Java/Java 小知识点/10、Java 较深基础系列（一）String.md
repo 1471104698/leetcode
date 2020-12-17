@@ -2,115 +2,71 @@
 
 ## 1、String 的不可变和不可继承
 
-### 1、不可变
+> #### 不可变
 
-> ### 什么是不可变？
-
-所谓的不可变，就是一个类的实例创建完成后，不能再修改它的成员变量值
-
-
-
-> ### String 为什么不可变
-
-String 类源码如下：
+String 的大体架构如下：
 
 ```java
-public final class String implements java.io.Serializable, Comparable<String>, CharSequence {
-    private final char value[];
+public final class String
+    implements java.io.Serializable, Comparable<String>, CharSequence {
     
-    //do something
+    private final char value[];
+
+    private int hash; // Default to 0
 }
 ```
 
-String 底层实现是一个 char[] 数组，跟 C 和 SDS 的字符串实现一样
+String 的底层是使用 char[] 数组来实现的，它使用 final 修饰，保证了 value 不可再指向其他的对象，但是这不意味着 value 内的值不可变，只不过它没有对外提供接口去改变这个 char[] 数组的值
 
-这个 char[] 数组使用 final 修饰，这样就导致了不能将 char[] 数组 引用变量 重新指向新的引用
-
-但是需要注意的是，final 修饰的 char[] 只是引用不可变，但是内部数据是可变的
-
-而如果提供修改 char[] 数组内部数据的 api，那么就跟 StringBuilder 一样了，就失去了 String 的不可变这一特点
+同时，它会提供了一个 hash 字段用来存储第一次计算的 hashCode 值
 
 
 
-> ### String 为什么设计为 不可变
+String 设计为不可变有三个优点：
 
-有两个优点：
+- 值的不可变，防止出现意料之外的改变导致的错误
 
-- 安全
+  ```java
+  将 String 变量通过传参传给别的方法，不必担心它修改 String 内部的值导致自己的逻辑出现问题
+  因此一般在非拼接字符串的情况下不使用 StringBuilder 和 StringBuffer
+  ```
 
 - 可以用作常量放入字符串常量池中进行复用
 
+  ```java
+  由于 String 不可变，所以在编译器期间对定义好的字符串字面量，将堆中的引用 存储到字符串常量池中进行复用
+      避免多次创建 String 对象，节省内存，避免 GC
+  ```
+
+- 只需要计算一次 hashCode()
+
+  ```java
+  由于 value 值不可变，所以它的 hashCode 是固定的，因此只需要计算一次，将它存储到 hash 字段中，后续无需再进行计算
+  ```
 
 
-**安全：**
 
-因为字符串是最常用的，而它也经常作为方法参数进行传参，在方法内部不可避免的会修改字符串的值，这就是问题所在
+由于 String 不可变，所以字符串拼接都是使用会创建新的字符串对象
 
-与之对应的是 StringBuilder 和 StringBuffer
+编译器会进行优化，底层使用 StringBuilder 进行拼接，提高效率
 
-有如下代码
 
-```java
-class A{
-    public void static main(Stirng[] args){
-        String a = "abc";
-        StringBuilder sb = new StringBuiler{"abc};
-        h1(a);
-        h2(sb);
-        System.out.println(a);
-        System.out.println(sb.toString());
-    }
-    public static void h1(String a){
-        a += "aa";
-    }
-    public static void h2(StringBuilder sb){
-        sb.append("aa");
-    }
-}
-```
 
-我们可以发现，a 的值没有发生改变，而 sb 的值发生了改变了
+> #### 不可继承
 
-很多时间，我们并不希望 字符串的值发生改变，而仅仅只是将它作为一个参数传进方法内给它使用而已
+String 跟 Integer 都是使用 final 修饰的，因此不可继承
 
-如果它是可变的，那么在方法内很可能发生改变，但是却没有被注意到
+
+
+个人认为设置为不可继承的目的：
 
 ```java
-比如之前我做的一道二叉树的题目，求根到叶子节点的路径值，节点值都是字符，所以需要使用 StringBuilder，方便回溯，而当时忘了将添加值删掉，导致错误，而如果直接使用 String 的话，就无需去考虑删值了，不过效率会降低
+String 是一个核心类，非常常用，很多类都使用到了 String
+
+如果用户自定义类继承了 String，重写了它的方法，但是在方法内部修改了原本的逻辑，违背了 String 原本的行为期望，导致程序出现错误
+这同时也是违背了里氏替换原则。
+设计者为了避免这个问题，直接设计为 不可继承
 ```
-
-
-
-**复用：**
-
-String 借助这个不可变性还有一个常量池属性，即它可以添加到常量池中，被多个引用进行复用，而不用创建重复的对象，节省空间 
-
-如果可变，那么这个就失去了意义了，因为这个值随时可能被改变，这样就会影响到其他的引用
-
-
-
-### 2、不可继承
-
-
-
-> ### String 为什么不可继承
-
-```java
-//使用 final 修饰
-public final class String implements java.io.Serializable, Comparable<String>, CharSequence {
-    //do something
-}
-```
-
-String 类使用 final 修饰，表示该类不可被继承
-
-
-
-> ### String 为什么设计为不可继承
-
-设置为不可继承，那么方法就不能被重写，这样才通用，**String 是一个基础类，很多的 JDK 定义的基础类都使用了 String**
-
-如果用户的一个类继承 String 重写了 String 的方法，那么在其他类中本来是传入 String，使用的是 String 的方法逻辑的，却传入了用户自己写的类，导致对应的方法逻辑出现问题
 
 
 
@@ -173,7 +129,7 @@ class NewTest2 {
 
 ```
 
-可以看出字节码中涉及一个 ldc 指令，它操作的是非静态变量，如果是静态变量，那么对应的指令应该是 putstatic/getstatic
+字节码指令中有一个 ldc 指令
 
 ldc #5 表示将 常量池中的 #5 位置的数据 推送到 操作数栈顶，这时候是第一次调用，所以还是符号引用，并不是直接引用，因此这时候会进行解析，查看 字符串常量池 中是否存在这个字符串的引用，这时候是第一次，所以没有，那么会在堆中创建该字符串的 OOP 对象，然后将 引用 存储到 字符串常量池 中，再将引用返回，替换到 常量池 中 #5 的内容
 
@@ -183,7 +139,7 @@ ldc #5 表示将 常量池中的 #5 位置的数据 推送到 操作数栈顶，
 
 
 
-### 2、创建对象的情况
+### 2、ldc 指令的各种情况
 
 **情况一：**
 
@@ -196,6 +152,8 @@ class A {
 ```
 
 就是上面的例子了，"he" 和 "llo" 会在堆中创建对象，然后将引用存储到字符串常量池中
+
+
 
 
 
@@ -433,13 +391,9 @@ s1 和 s2 都是 "hello"
 
 
 
-> ### 关于 new String("abc") 个人推测
+> #### new String("abc") 创建了多少个对象？
 
-首先，上面已经说了 intern() 会先去字符串常量池中查找是否存在该字符串，如果不存在那么将 调用该方法的字符串的在堆中的引用存储到 字符串常量池中，如果存在则直接返回
 
-如果是在代码中显示的表示字面量，比如 `String s = "abc"`，那么会自动对 "abc" 执行一条 ldc 指令，如果是第一次出现 abc，那么这时候会自动在 堆中 创建 值为"abc" 的 String 的 OOP 对象体，然后将引用返回，存储到字符串从常量池中
-
-这样的话，对于如下代码：
 
 ```java
 String s = new String("abc");
@@ -464,8 +418,8 @@ String s = new String("abc");
 
 - 先执行 new 指令，在堆中创建一个 OOP 对象体
 
-- 对 "abc" 执行 ldc，此时字符串常量池中没有，那么在堆中创建，然后返回引用
-- 调用 String 的构造方法
+- 对 "abc" 执行 ldc，此时字符串常量池中没有，那么在堆中创建，然后返回该对象的引用
+- 将 ldc 返回的对象作为方法参数传入 String 的构造方法
 
 重点就是这个构造方法
 
@@ -483,19 +437,25 @@ public final class String{
 }
 ```
 
-String 的底层是维护一个 char[] 数组
+String 的底层是维护一个 char[] 数组 value
 
-我们可以看出，String 的这个入参构造方法是将传入的 String 的 char[] 数组赋值给 当前 String 的 char[] 数组
+我们可以看出，String 的入参构造方法是将当前 String 对象的 value 指向 传入对象 的 value
 
-而 new String("abc") 应该是从 字符串常量池中获取 "abc" 字符串的引用，这个引用所引用的对象是调用了 ldc 指令并在堆中创建了的 OOP 对象
+这意味着什么？ 意味着 **s 中的 value 和 ldc 指令创建的 "abc" 底层使用的是同一个 char[] 数组**
 
-这意味着什么？ 
+但虽然它们底层的 char[] 数组是同一个，但是由于 s1 == s2 比较的是外层的 String 对象，由于 String OOP 对象不同，所以即使内部的 char[] 数组是同一个对象，也会返回 false
 
-意味着 String s 中的 char[] 数组 和 ldc 指令创建的 "abc" 字符串底层使用的是同一个 char[] 数组
+<img src="https://pic.leetcode-cn.com/1603788082-ICxpKm-image.png" style="zoom:40%;" />
 
-<img src="https://pic.leetcode-cn.com/1603788082-ICxpKm-image.png" style="zoom:70%;" />
 
-虽然它们底层的 char[] 数组是同一个，但是由于 s1 == s2 比较的是外层的 String 对象，由于 String OOP 对象是不同的，所以即使内部的 char[] 数组是同一个对象，也会返回 false
+
+综上，new String("abc") 应该是创建了 3 个对象：
+
+1. ldc 指令创建的字符串字面量 "abc" 外层 String OOP 对象
+
+2. 表示字面量 "abc" 的 char[] 数组对象 value
+
+3. new String() 创建的外层 String OOP 对象
 
 
 

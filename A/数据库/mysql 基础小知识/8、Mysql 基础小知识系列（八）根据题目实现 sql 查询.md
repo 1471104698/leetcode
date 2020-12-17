@@ -26,21 +26,10 @@ mysql 中有这么一道经典的题目：求 各科成绩前三的学生
 
 ```sql
  ①
-select s1.id, s1.name, s1.cid, s1.score,
-	  ②
-	(select count(1) from  sc s2 where  s1.cid = s2.cid and	 s1.score < s2.score) + 1 as rank
-from 
-	sc s1
-order by
-	rank;
-```
-
-sql 形式格式化后：
-
-```sql
 select 
 	s1.id, s1.name, s1.cid, s1.score,
 	(
+        ②
         select
         	count(1)
         from 

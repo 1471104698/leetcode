@@ -4,17 +4,36 @@
 
 ## 1、HashMap 和 HashTable 的区别
 
+HashMap 和 HashTable 有 5 个区别：
+
+- 线程安全问题
+- key 和 value 空值问题
+- 初始容量不同
+- 迭代方式不同
+- 对 hash 的计算不同
+
 
 
 HashMap 线程不安全
 
-HashTable 线程安全，方法加 synchronized 锁  
+HashTable 线程安全，方法级别上加 synchronized 锁  
 
 
 
-HashMap 的 key 只存在一个位置为空值，value 允许空值，并且 key 为 null 时，get() 得到的结果也为 null，因为它无法分辨之前是否存储过 key = null 的情况，因此统一返回 null，所以 put(null, xx) 也没什么意义
+HashMap 的 key 允许一个 Null，value 都允许 Null
 
-HashTable 的 key 和 value 都不允许空值
+```java
+当存储 (key, value) = (null, 1) 时，key 的 hash == 0，因此它实际上是可以构成一个 Node 的，
+    如 Node(key, value, hash; next) = Node(null, 1, 0, null)
+key 只允许存在一个 null 的原因是下次 put(null, 2) 的时候，会发现已经存在该 Node 了，因此直接替换旧值
+```
+
+HashTable 的 key 和 value 都不允许 Null
+
+```java
+HashTable、ConcurrentHashMap 之类的都不允许 key 和 value 为 null
+在它们的方法内部会进行判空，抛异常
+```
 
 
 
@@ -32,32 +51,65 @@ HashMap 的迭代方式是 Iterator
 
 HashTable 的迭代方式是 Enumeration + Iterator
 
-- 前一种支持修改，但不属于 fail-safe，因为它没有任何的检验和操作
-- 后一种不支持修改，是 fail-fast
+- Enumeration 支持修改，**属于 fail-safe**
+- Iterator 不支持修改，**属于 fail-fast**
 
 
 
-HashMap 插入时对象需要重新计算 hash 值
+HashMap 插入时对象需要根据 hashCode 重新计算 hash 值（前 16bit 异或 后 16bit）
 
-HashTable 直接将对象的 hashCode 作为 hash 值，直接获取 key.hashCode()
+HashTable 直接将对象的 hashCode 作为 hash 值
 
 
 
-> ### 为什么 HashTable 不能存储空值？
+> #### 为什么 HashTable / ConcurrentHashMap 的 key 和 value 不能存储空值？
 
-因为 HashTable 是具有线程安全性质的，它是在多线程条件下使用的
+ [这道面试题我真不知道面试官想要的回答是什么_个人文章 - SegmentFault 思否](https://segmentfault.com/a/1190000021105716) 
 
-我们可以发现，当我们使用 get() 获取 key 对应的 value 的时候，如果 value 不存在，那么会返回 null
 
-但是如果是在多线程环境下，如果可以存储 null 值，当 HashTable 使用 get() 获取 key 对应的 value，如果 value = null
 
-这时候它不知道是因为元素中不存在 key 的原因 还是 因为 key 对应的 value 就是 null 的原因，才返回的 null，所以这时候它会调用 contains() 方法，查找 key 是否存在，如果存在，那么表示的 key 对应的 value 为 null
+这个问题翻译过来就是，在 put() 的时候，作者为什么要设置：
 
-由于 HashTable 中 get() put() contains() 方法都是上锁的，所以没有问题，问题的关键在于，这是多线程环境下的，当 contains() 完成知道了 null 的原因后，当准备下一步利用这个值做某些事情的时候，别的线程可能就改变这个值，使它不为 null 了，**为 null 和 不为 null 对于后续我们的逻辑判断的影响是很大的**
+```java
+if(key == null || value == null){
+	throw new NullPointerException();
+}	
+```
 
-所以 HashTable 和 concurrentHashMap 都不允许存储 null 值
 
-而 HashMap 是单线程的，所以不会出现此种情况，因此可以存储 null 值
+
+并发包的作者是谁？Doug Lea
+
+ ![file](https://image-static.segmentfault.com/100/042/1000423480-5ddb63e23913c_articlex) 
+
+所以要得到这个问题的答案，还是作者的回答才具有权威
+
+早在 2006 年 5 月 12 日 早上 06 点 01 分 45 秒，就有人发”求助“邮件：
+
+```java
+大致意思是：为什么 ConcurrentHashMap 不支持 key 和 value 为 null
+```
+
+
+
+Doug Lea 大佬的回答是：
+
+```java
+当 value == null 时存在二义性，
+因为当 map.get(key) 得到 null 时，在 map 内部它知道是否存在对应的 Node 节点，
+但是在用户层面，得到的就是 null，你不知道到底是 map 内部不存在这个 key 的映射，还是说这个 key 映射的 value 就是 null，这就存在了 二义性
+
+对于 HashMap，它默认不支持并发操作，因此在非并发的情况下，它可以使用 containsKey() 来判断是否存在 Node 节点，因此来最终确定这个状态
+对于 ConcurrentHashMap，它主要用于并发操作，假设在第一个 get(key) 的时候得到 null，此时其中是不存在 Node 的，而在调用 containsKey() 来判断是否存在 Node 节点前，其他线程调用了 put(key, null)，那么对于当前线程来说，它调用的 containsKey() 返回的是 true，这跟它调用 get() 时的状态不一致
+    
+    因此，ConcurrentHashMap 的 value 不支持 null
+```
+
+实际上个人认为，虽然 ConcurrentHashMap 的 value == null 会存在二义性，但是最终实际上状态是确定了的，即其他线程在调用 put(key, null) 后，key 的映射的的确确是存在的，这个二义性并不会造成什么坏的后果，因此数据的确是存在的
+
+
+
+而对于 key 为什么不能为 null，大佬的回答是自己不喜欢 null，并且它认为 HashMap 这种 map 集合支持 null 本身就是一种错误的设计
 
 
 
@@ -113,7 +165,7 @@ n |= n >>> 8； 对 n 右移 8 位，然后进行或操作，那么 n 变成  01
 
 
 
-> ### 链表转红黑树的条件
+> #### 链表转红黑树的条件
 
 链表转红黑树，需要两个条件：
 
@@ -126,7 +178,7 @@ n |= n >>> 8； 对 n 右移 8 位，然后进行或操作，那么 n 变成  01
 
 
 
-> ### 为什么使用红黑树，不使用 二叉查找树 或者 AVL 树？
+> #### 为什么使用红黑树，不使用 二叉查找树 或者 AVL 树？
 
 因为二叉查找树可能会退化成链表
 
@@ -136,7 +188,7 @@ n |= n >>> 8； 对 n 右移 8 位，然后进行或操作，那么 n 变成  01
 
 
 
-> ### 为什么不一开始就使用红黑树？
+> #### 为什么不一开始就使用红黑树？
 
 红黑树 查询 0(logn)，插入删除 O(logn)， 链表 查询 O(n)，插入删除 0(1)
 
@@ -146,7 +198,7 @@ n |= n >>> 8； 对 n 右移 8 位，然后进行或操作，那么 n 变成  01
 
 
 
-> ### 为什么节点个数为 8 时才转红黑树?
+> #### 为什么节点个数为 8 时才转红黑树?
 
 概率问题
 
@@ -156,7 +208,7 @@ n |= n >>> 8； 对 n 右移 8 位，然后进行或操作，那么 n 变成  01
 
 
 
-> ### 为什么在节点个数为 6 时才转链表？
+> #### 为什么在节点个数为 6 时才转链表？
 
 根据概率论选的 8 转红黑树，那么一旦转了红黑树，表示遇到了这个非常低的概率，那么它就可能会再次发生
 
@@ -172,31 +224,42 @@ n |= n >>> 8； 对 n 右移 8 位，然后进行或操作，那么 n 变成  01
 
 
 
-具体看： https://juejin.im/post/6879291161274482695 
-
-### 1、fail-fast 和 fail-safe 的区别
-
-fail-fast 意为 快速失败，fail-safe 意为 安全失败
+ [一文彻底弄懂 fail-fast、fail-safe 机制（带你撸源码） (juejin.cn)](https://juejin.cn/post/6879291161274482695) 
 
 
 
 **这里说下使用迭代器的好处：**
 
-使用 迭代器 iterator，它能够屏蔽底层的细节，无论底层是如何实现的，都是统一的 api `hasNext()、next()、remove() `不会改变
+使用 迭代器 iterator，它能够屏蔽底层的细节，无论底层是如何实现的，都是统一的 api `hasNext()、next()、remove() `不会改变·
 
 
 
-使用 fail-fast 机制，为了防止**遍历**过程中，其他线程随意 添加、删除数据 导致遍历过程中数据发生变化，
+- fail-fast 机制：为了防止**遍历**过程中，其他线程 结构性改变集合，导致迭代器遍历过程出现问题
 
-​	`java.uti `下的集合类都是使用 fail-fast 的，防止迭代时被修改，**线程不安全的集合类都是使用 fail-fast 机制**
+  ​	`java.uti `下的集合类都是使用 fail-fast 的
 
-使用 fail-safe 机制，为了可以在并发情况下修改数据，使用的是 CopyOnWrite 技术，加锁复制副本，后续数据修改的是副本数据
+- fail-safe 机制：为了可以在并发情况下修改数据，即在迭代器中不会抛出 并发异常 ConcurrentModificationException 
 
-​	`java.util.concurrent` 集合下的类都是使用 fail-safe 的，可以在并发情况下修改，不会抛异常
+  ​	`java.util.concurrent` 集合下的类都是使用 fail-safe 的
+
+```java
+网上的说法：
+1、fail-fast（快速失败） 是迭代器有 modCount 检测
+2、fail-safe（安全失败） 是复制一份副本（类似 CopyOnWriteArrayList 这种使用 COW），写操作都是在副本上进行，这也就不会有 modCount 变量检测
+
+对于 fail-safe 的说法我不敢苟同，什么叫做复制一份副本 来避免 modCount 的检测？
+	在 CopyOnWriteArrayList 和 ConcurrentHashMap 的所有迭代器中根本就不存在 modCount 和 expectedModCount
+	这样何来 modCount 变量检测？
+实际上真正的 fail-safe 机制应该是在各种程度上允许并发修改，并且迭代器不会抛出并发异常
+    比如 CopyOnWriteArrayList 是对写操作拷贝副本，迭代器迭代的还是原来的数据
+    比如 ConcurrentHashMap 没有进行任何操作，它是弱一致性的迭代器，允许并发修改，可能会遍历过程中会读取不到一些数据，但是这些都是在它自己能够接收的范围内的。（它也可以 copy 一份副本，但是它没有这么做，因为它接收这个弱一致性）
+```
 
 
 
-### 2、fail-fast 实现原理
+### 1、fail-fast（快速失败，不允许并发修改）
+
+
 
 ArrayList 内部构造如下：
 
@@ -205,12 +268,14 @@ class ArrayList{
     protected int modCount = 0;
     public boolean add(E e) {
         modCount++;
-        //xxx
+        //添加操作
     }
     public E remove(int index) {
         modCount++;
-        //xxx
+        //移除操作
     }
+    
+    //ArrayList 内部维护的 Iterator 迭代器
     private class Itr implements Iterator<E> {
         int expectedModCount = modCount;
 
@@ -236,19 +301,30 @@ class ArrayList{
 }
 ```
 
-可以看出，ArrayList 内部维护了一个 modCount，初始值为 0，每次只要 ArrayList 调用 add()、remove() 这种会结构性的修改 ArrayList 的方法，那么 modCount ++（结构性意味着改变了 ArrayList 的结构，比如添加元素使得长度变长）
+可以看出，ArrayList 内部维护了一个 modCount，初始值为 0，每次只要 ArrayList 调用 add()、remove() 这种会结构性的修改 ArrayList 的方法，那么 modCount ++（结构性意味着改变了 ArrayList 的有效数组的长度）
 
-而我们每次 foreach 遍历 ArrayList 的时候，实际上就是创建了它内部的一个迭代器 Itr，在创建的时候 Itr 会初始化一个 期望值expectedModCount = modCount，这个 expectedModCount 是属于 Itr 内部的，modCount 是属于 整个 ArrayList 的
+我们每次 foreach 遍历 ArrayList 的时候，实际上就是创建了它内部的一个迭代器 Itr，在创建的时候 Itr 会初始化一个 期望值expectedModCount，初始值为 modCount，
 
-Itr 的 next() 和 remove() 在前面都会调用 checkForComodification() ，当遍历过程中其他线程调用了 ArrayList 的 add() 或者 remove()，那么 modCount ++，这时候 Itr 调用 next() 或者 remove() 就会导致 modCount != expectedModCount 从而抛出异常
+```java
+expectedModCount 是 Itr 内部的，
+modCount 是整个 ArrayList 的
+```
+
+Itr 的 next() 和 remove() 在前面都会调用 checkForComodification() ，当遍历过程中其他线程调用了 ArrayList 的 add() 或者 remove()，那么 modCount ++，这时候 Itr 调用 next() 或者 remove() 发现 modCount != expectedModCount,
+
+从而抛出 ConcurrentModificationException 并发异常
+
+因此，如果单线程在使用迭代器遍历的过程中，如果要移除元素，那么不要调用 ArrayList 的 remove()，而是使用迭代器的 remove()，这样才不会触发 modCount++
 
 
 
-### 3、fail-safe 实现原理
+### 2、fail-safe（安全失败，允许并发修改）
 
-比如 CopyOnWriteArrayList  这个类，使用 COW 技术支持并发修改（在 redis 的 RDB 持久化也有使用）
 
-只需要在写线程（add()、remove()、set()）加锁，读线程无需加锁
+
+比如 CopyOnWriteArrayList ，使用 COW 技术支持并发修改（在 redis 的 RDB 持久化也有使用）
+
+只需要在写操作（add()、remove()、set()）加锁，读操作无需加锁
 
 ```java
 public boolean add(E e) {
@@ -274,69 +350,9 @@ private E get(Object[] a, int index) {
 }
 ```
 
-缺点就是读线程读到的数据不是实时的，并且在内存中复制一份副本，当 List 大小为 200MB 时，那么意味着内存中会存在 400MB 的这个数据，可能会频繁造成 GC
 
 
+再比如 ConcurrentHashMap，它有三种迭代器：KeyIterator、ValueIterator、EntryIterator，它们都是继承 BaseIterator，操作都是差不多的，不会加锁，不会抛出并发异常。
 
-## 5、为什么HashMap常用String对象作为key？ 
-
-因为 HashMap 比较的比较逻辑是
-
-```java
-if(e.hash == hash && (e.key == key || e.key.equals(key))){
-	//xxx
-}
-```
-
-hash 跟 hashCode 相关，key 跟 equals() 相关
-
-要保证使用不同的对象，但相同的对象内容能够对应上同一个 Node 节点
-
-那么就意味着在对象内容相同的时候， hashCode() 和 equals() 得到的结果是一样的
-
-而 String 内部自己重写了 hashCode() 和 equals()，都是根据内部的 char[] 来进行比较的，只要 char[] 内容相同，那么最终得到的 hashCode 是相同的，并且 equals() 为 true
-
-```java
-public int hashCode() {
-    int h = hash;
-    if (h == 0 && value.length > 0) {
-        char val[] = value;
-
-        for (int i = 0; i < value.length; i++) {
-            h = 31 * h + val[i];
-        }
-        hash = h;
-    }
-    return h;
-}
-public boolean equals(Object anObject) {
-    if (this == anObject) {
-        return true;
-    }
-    if (anObject instanceof String) {
-        String anotherString = (String)anObject;
-        int n = value.length;
-        if (n == anotherString.value.length) {
-            char v1[] = value;
-            char v2[] = anotherString.value;
-            int i = 0;
-            while (n-- != 0) {
-                if (v1[i] != v2[i])
-                    return false;
-                i++;
-            }
-            return true;
-        }
-    }
-    return false;
-}
-```
-
-
-
-当然，如果不使用 String 而是使用 自定义对象的话，那么我们就必须定义好在 对象内容相同 的情况下，生成的 hashCode() 相同，而不能 Object 默认的返回内存地址，同时还要重写 equals()
-
-即如果使用的是 User 这种的对象作为 key，那么就必须重写 hashCode() 和 equals()
-
-平时为了不这么麻烦，都是直接使用 String 来作为 key
+它们是弱一致性迭代器，因为遍历的过程中其他线程可以修改数据，导致有的数据遍历不到之类的，这也是 fail-safe 的一种
 

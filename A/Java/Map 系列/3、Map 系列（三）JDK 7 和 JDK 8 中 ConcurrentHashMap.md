@@ -394,11 +394,15 @@ final V putVal(K key, V value, boolean onlyIfAbsent) {
                 //19.如果node大于或者等于8，则转为红黑树
                 if (binCount >= TREEIFY_THRESHOLD)
                     treeifyBin(tab, i);
+                //如果链表中存在旧 Node 进行替换，那么就不需要下面的 addCount()了，直接 return;
+                if (oldVal != null){
+                    return oldVal;
+                }
                 break;
             }
         }
     }
-    //20.元素个数 +1，在上面已经释放锁了，即这里的 addCount() 调用是无锁状态了
+    //20. CAS 元素个数 +1，在上面已经释放锁了，这里只能用 CAS， 也无法使用到锁，因为上面锁的只有一个槽位
     addCount(1);
     return null;
 }
@@ -706,7 +710,13 @@ private final void fullAddCount(long x, boolean wasUncontended) {
 
 由于 ConcurrentHashMap 是并发情况下使用的，当高并发的时候，如果仅仅只有一个 baseCount 来记录元素个数，那么多个线程每次 addCount() 都会不断对 baseCount 进行自旋 CAS，而一次只有一个线程会成功，并发效率低；
 
-(可能会有人说，那么直接在 sync 锁里面执行不就行了？emmm，开发者应该是考虑早点释放锁，让其他等待锁的线程早点获取锁去执行吧，毕竟计数这个不太重要)
+```java
+可能会有人说，那么直接在 sync 锁里面执行不就行了？
+这是不行的，因为锁的只有一个槽位，而如果单单使用一个 size，那么对于其他槽位上的线程来说还是会存在竞争
+因此此时 锁不锁已经没有什么影响了，可以直接释放锁了
+    
+JDK 7 能够加锁解决是因为它的 size 是 Segment 的，而同一个 Segment 一次只能有一个线程获取，所以加锁解决即可
+```
 
 基于此，所以出现了 CounterCell 数组，它是用作辅助的，当对 baseCount CAS 失败的时候，表示存在竞争，**避免在一棵树上吊死**，那么这时候就使用到 CounterCell 了，不断改变 探针哈希值 h 来 hash 到不同的 CounterCell 数组位置，对其进行 CAS，这样的话，在不冲突的情况下，一次就可以存在  as.length 个线程可以进行 CAS +1 计数了，比起原本的多个线程都争夺一个 baseCount 效率提高太多了
 
@@ -850,7 +860,7 @@ HashEntry 的 next 没有用 final 修饰，所以是可以改变指向的，那
     因为 get() 线程没有加锁，如果读的过程中在进行元素迁移，那么读的链表顺序会发生改变
     比如 get() 定位的槽位上的链表是 1 -> 2 -> 3 -> 4 -> 5，目标 key = 3，当扫描到 2 的时候，扩容 将链表分为两段， 
     table 变成 1 -> 3 -> 5 和 2 -> 4 两段链表
-    那么对于 get() 线程来说，接下来读到的就是 4 了，然后到达链表尾，发现不存在 3，返回 null，所以就导致错误发生
+    那么对于 get() 线程来说，接下来读到的就是 4 了，然后到达链表尾，发现不存在 3，返回 null，所以就存在的数据不可见了
 ```
 
 
@@ -895,11 +905,13 @@ HashEntry 的 next 没有用 final 修饰，所以是可以改变指向的，那
 - TreeBin：封装了 红黑树节点 TreeNode（HashMap 中只有 TreeNode）
 - ForwardingNode ：table 扩容时的临时节点
 
-**它们都继承了 Node，目的是为了在 get() 时多态调用方法**
+**它们都继承了 Node，目的是为了在 get() 时多态调用**
 
+```java
 在 Node 中有 find() 方法，表示用来查找 node，该方法在 Node 中没有什么实际作用，目的是为了让 TreeNode 和 ForwardingNode 都重写，然后利用多态进行调用
 
 在 get() 时，无论是 红黑树节点，还是正在扩容时的临时节点，利用多态性质，统一作为 Node 调用 find() 来获取目标 node
+```
 
 
 
@@ -1139,7 +1151,7 @@ private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
                 	这里的做法思路 跟 JDK 7 的扩容一样，对每个槽位上的链表
                 	同样是获取最后几个 hash 后处于同一个槽位的 Node 进行复用
                 	而不需要去新建它们
-                	同样是为了 get() 考虑，避免出现数据查找不到的情况
+                	同样是为了正在 get() 中的线程考虑，避免出现数据查找不到的情况
                 */
                     //这里的 n 是旧数组的长度，这里用 hash & n 判断 hash 后是在旧位置还是在新位置
                     int runBit = fh & n;
@@ -1165,7 +1177,7 @@ private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
                     //第二次扫描，新建节点，lastRun 以及后面的节点不需要扫描
                     for (Node<K,V> p = f; p != lastRun; p = p.next) {
                         int ph = p.hash; K pk = p.key; V pv = p.val;
-                        //使用高低链表存储 新旧两个位置的节点，这里使用的是头插法，因此链表会反转
+                        //使用 高低链表 存储两个位置的节点，这里新建的 Node 插入高低链表中使用的是头插法
                         if ((ph & n) == 0)
                             ln = new Node<K,V>(ph, pk, pv, ln);
                         else
@@ -1176,9 +1188,9 @@ private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
                     //在 nextTab 的新位置处设置 高链表
                     setTabAt(nextTab, i + n, hn);
                     /*
-                	将旧数组 tab[i] 的 Node 替换为 ForwardingNode，
-                	其他线程 get() 时可以通过这个 fwd 找到迁移的数据
-                	这里不会影响到正在 get() 的线程，因为正在 get() 的线程仍然是在扫描 tab，链表的位置没有发生改变
+                	setTabAt()：将旧数组 tab[i] 的 Node 替换为 ForwardingNode，
+                	其他线程在扩容过程中调用 get() 时可以通过这个 fwd 在旧数组 tab 中找到迁移后的数据
+                	这里不会影响到扩容前正在 get() 的线程，因为正在 get() 的线程它会按照它持有的链表节点一直往下遍历
                 */
                     setTabAt(tab, i, fwd);
                 }
@@ -1194,6 +1206,14 @@ private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
 
 
 
+JDK8 ConcurrentHashMap 扩容特性：
+
+```java
+JDK 8 的 ConcurrentHashMap 的扩容中使用了 JDK 7 ConcurrentHashMap 扩容方法 的 两次扫描复用节点 和 JDK 8 HashMap 扩容方法的 高低链表
+```
+
+
+
 整个扩容的过程：
 
 - 1）计算线程每次分配的 table 槽位数，最小为 16，即每个线程最少处理 16 个槽位
@@ -1201,7 +1221,7 @@ private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
 - 3）创建一个 ForwardingNode 节点，将 nextTable 作为参数传入，即 ForwardingNode 内部会维护 新的 table -- nextTable 
 - 4）领取分配到的槽位区间，一些细节就忽略了，当没有槽位可以分配时，那么该线程退出
 - 5）一个个处理分配到的槽位，跟 put() 时一样，对槽位上的头节点 f 进行加锁，当加锁完成后，再判断 f 是否发生改变
-- 6）然后就跟 JDK 7 的 rehash() 一样，对每个槽位上的链表进行两次扫描，一次扫描找到可复用节点，一次扫描新建（复制）节点，对节点的处理 跟 JDK 8 的 HashMap 扩容一样，将一个槽位上的链表 根据 hash 后位置的不同 分为 高、低 两条链表，这里对第二次扫描新建的节点插入到 高低链表 使用的是 **头插法**。
+- 6）然后就跟 JDK 7 的 rehash() 一样，对每个槽位上的链表进行两次扫描，一次扫描找到可复用节点，一次扫描新建（复制）节点，对节点的处理 跟 JDK 8 的 HashMap 扩容一样，将一个槽位上的链表 根据 hash 后位置的不同 分为 高、低 两条链表，这里对第二次扫描新建的 Node 节点插入到 高低链表 使用的是 **头插法**。
 - 7）将高低链表插入到 nextTab 上，然后将 table 上该槽位的 Node 替换为 ForwardingNode ，这样后续别的线程 get() 时就会访问到这个 ForwardingNode ，然后再通过这个 ForwardingNode  访问到迁移了数据的 nextTab
 
 

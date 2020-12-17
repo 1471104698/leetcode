@@ -4,7 +4,7 @@
 
 Exception 和 Error 都是 Throwable 的子类
 
-Exception 讲究的是程序方面的错误，比如 Null 异常、数组越界异常、除 0 异常、SQL 运行异常、IO 异常 等
+Exception 讲究的是程序方面的错误，比如 空指针异常、数组越界异常、算术异常（比如 1 / 0）、SQL 运行异常、IO 异常 等
 
 Error 讲究的是 JVM 层面的错误，比如 NotClassDefFoundClass、OOM
 
@@ -12,9 +12,9 @@ Error 讲究的是 JVM 层面的错误，比如 NotClassDefFoundClass、OOM
 
 
 
-**非运行时异常：**IOException、SQLException、ClassNotFoundExecption这种在编译的时候就强制要求进行 try-catch 或者 throws
+**非运行时异常：**IOException、SQLException、ClassNotFoundExecption，在编译的时候就强制要求进行 try-catch 或者 throws
 
-**运行时异常：**即只有程序运行时才会发生的异常，一般是由于程序的逻辑产生的，比如 Null 异常、数组越界异常
+**运行时异常：**即只有程序运行时才会发生的异常，一般是由于程序的逻辑产生的，比如 空指针异常、数组越界异常、算术异常
 
 
 
@@ -22,15 +22,15 @@ Error 讲究的是 JVM 层面的错误，比如 NotClassDefFoundClass、OOM
 
 
 
-## 2、NotClassDefFoundClass 和 ClassNotFoundClass 的区别
+## 2、NoClassDefFoundError 和 ClassNotFoundException 的区别
 
-具体看  https://www.cnblogs.com/xiao2shiqi/p/11740563.html 
+ [聊聊面试-NoClassDefFoundError 和 ClassNotFoundException 区别 - 博客园 (cnblogs.com)](https://www.cnblogs.com/xiao2shiqi/p/11740563.html) 
 
 
 
-**ClassNotFoundClass 是 Exception 类型**，它可以被 tey-catch，产生的原因是比如 Class.forName() 时没有找到对应的 class 对象
+**ClassNotFoundException 是 Exception 类型**，它是一个异常，它可以被 try-catch，当 Class.forName() 时没有在堆中找到目标 class 对象，就会抛出该异常
 
-**NotClassDefFoundClass 是 Error 类型**，它表示编译时存在对应的 Class 文件，但是在类加载的时候就没有找到了，比如我们在启动的时候删除了某个类的 class 文件，那么就会抛出 NotClassDefFoundClass 
+**NoClassDefFoundError 是 Error 类型**，它是一个错误，跟 JVM 类加载相关，它表示在类加载的时候找不到加载的 class 文件，比如 A 的父类为 B，在 A 类加载的时候会先去加载 B，当我们在启动的时候删除了 B 的 class 文件，那么就会抛出该 Error
 
 
 
@@ -70,7 +70,7 @@ public class A{
 
 
 
-当方法调用 throw 抛出运行时异常时，方法上不需要声明 throw 异常类型，并且调用该方法的方法也不需要强制 catch 异常
+当方法调用 throw 抛出运行时异常时，方法上不需要声明 throw 异常类型，因此调用该方法也不需要强制处理该异常
 
 ```java
 public class A {
@@ -114,7 +114,7 @@ public class A {
 
 
 
-深层级的测试：
+**没有捕获异常的方法在异常处是不会继续往后面执行的**，测试如下：
 
 ```java
 public class A {

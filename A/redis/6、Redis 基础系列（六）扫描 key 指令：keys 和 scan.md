@@ -42,7 +42,7 @@ keys 执行的过程中直接停止 redis 服务，不会处理用户的请求�
 
 ## 2、scan
 
-具体看 <http://chenzhenianqing.com/articles/1101.html>
+<http://chenzhenianqing.com/articles/1101.html>
 
 
 
@@ -354,7 +354,7 @@ return v;
 
 > ### 4、scan 过程中发生 rehash 
 
-如果在 scan 的过程中发生 rehash，那么会扫描 ht[0] 和 ht[1]，这样可以做到 不重复 和 不缺失
+如果在 scan 的过程中发生 rehash，那么会扫描 ht[0] 和 ht[1]，这样可以做到 不缺失
 
 
 

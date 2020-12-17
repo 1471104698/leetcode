@@ -2,6 +2,8 @@
 
 [MVCC 讲解 -- CSDN](https://blog.csdn.net/Waves___/article/details/105295060#1.2、Read View 结构)
 
+[数据库基础（四）Innodb MVCC实现原理 -- 有些错误，挑着看](https://zhuanlan.zhihu.com/p/52977862 )
+
 
 
 ### 1、MVCC 出现的原因
@@ -104,7 +106,7 @@ ReadView 有 3 个重要字段 ：
 
 ### 5、RR 解决不可重复读 和 幻读
 
-具体看   https://www.zhihu.com/question/372905832/answer/1106544250 
+[RR 级别下如何解决不可重复读和幻读](https://www.zhihu.com/question/372905832/answer/1106544250)  
 
 
 

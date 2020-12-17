@@ -27,11 +27,11 @@
 
 **DispatcherServlet：**调度器，控制整个流程，对其他各个组件进行分工，拦截器拦截的请求会 调用 DispatcherServlet 的 service()，交给 DispatcherServlet 去处理
 
-**HandlerMapping ：**管理所有的 Handler，它会根据 request 的 HTTP 类型 和 url 解析出应该调用哪个 Handler，即内部存储的是映射，通过映射关系可以获取调用的 Handler
+**HandlerMapping ：**管理所有的 Handler（HandlerMethod ），它会根据用户 request 的 `HTTP 类型 和 url` 匹配所有的 RequestMappingInfo 解析出应该调用哪个 Handler，内部存储的是 RequestMappingInfo 和 HandlerMethod 的映射，通过映射关系可以获取调用的 Handler
 
 **HandlerAdapter：**为了消除不同类型的 Handler 的方法调用差异，需要转换为适配器
 
-**Handler：**实际上是 HandMethod 类型，内部存储了某个 Controller 的 name 和 Class 对象，以及 该 Controller 中某个方法的 Method 对象，后续 HandMethod 会被封装为 **HandlerExecutionChain**
+**Handler：** HandMethod 类型，内部存储了 Controller 某个方法的 Method 对象（后续 HandMethod 会被封装为 **HandlerExecutionChain**）
 
 View Resolver：对 ModelAndView 对象进行解析，根据内部的 View 信息解析成真正的视图 View（如通过一个JSP路径返回一个真正的JSP页面）
 
@@ -132,7 +132,11 @@ protected void doService(HttpServletRequest request, HttpServletResponse respons
 }
 ```
 
-在 doService() 中在给 request 设置了一些参数后，调用了 doDispatch()，该方法是 Spring MVC 的核心处理逻辑，进入该方法才是真正进入了 Spring MVC 
+在 doService() 中在给 request 设置了一些参数后，调用了 doDispatch()，
+
+**doDispatch() 是 Spring MVC 的核心处理逻辑，进入该方法才是真正进入了 Spring MVC** 
+
+
 
 DispatcherServlet 中 doDispatch() 主要逻辑如下：
 
@@ -145,13 +149,12 @@ protected void doDispatch(HttpServletRequest request, HttpServletResponse respon
 
     try {
         try {
-            //创建一个视图对象 ModelAndView
             ModelAndView mv = null;
             Object dispatchException = null;
             try {
                 processedRequest = this.checkMultipart(request);
                 multipartRequestParsed = processedRequest != request;
-                //获取处理请求的 视图对象 handler，里面封装了我们的 Controller 对象
+                //获取处理请求的 视图对象 handler，里面封装了我们的 Controller 某个方法的 Handler 对象
                 mappedHandler = this.getHandler(processedRequest);
                 if (mappedHandler == null) {
                     this.noHandlerFound(processedRequest, response);
@@ -340,7 +343,7 @@ public class HandlerMethod {
 
 
 
-综上，RequestMappingInfo 存储了匹配的 HTTP 类型 和 匹配 url 格式、匹配的请求参数等 ，HandlerMethod 记录了 某个Controller 以及 该 Controller 对应的某个 方法对象 Method
+综上，RequestMappingInfo 存储了匹配的 HTTP 类型 和 匹配 url 格式、匹配的请求参数等 ，HandlerMethod 记录了 某个Controller 对应的某个方法的 Method 对象 
 
 在 RequestMappingHandlerMapping 的父类 AbstractHandlerMethodMapping 中维护了一个 MappingRegistry 对象，该对象内部又维护了多个 map，其中一个 map 对象 mappingLookup 存储了 RequestMappingInfo 和 HandlerMethod 的映射关系
 
@@ -360,27 +363,32 @@ public class UserController {
 
 **RequestMappingInfo 和  HandlerMethod  的映射关系就是 [GET] + [/user/{id} ➡ ➡ userController + getUser**
 
-当用户发起请求时，通过 mappingLookup  的 entrySet() 获取所有的 RequestMappingInfo ，然后将 每个 RequestMappingInfo 和 用户 request 进行匹配，一旦匹配成功，那么就调用 `mappingLookup.get()` ，获取 RequestMappingInfo 对应的 HandlerMethod ，即可得知到用户 request 对应请求的是 哪个 Controller 的 哪个方法
+当用户发起请求时，通过 mappingLookup  的 entrySet() 获取所有的 RequestMappingInfo ，然后将 每个 RequestMappingInfo 和 用户 request 进行匹配，一旦匹配成功，那么就调用 `mappingLookup.get()` ，获取 RequestMappingInfo 对应的 HandlerMethod ，即可得到用户 request 对应请求的是 哪个 Controller 的 哪个方法
 
 
 
-Spring MVC 使用这种 RequestMappingInfo 和 HandlerMethod  映射的方式，实际上是分解了所有的 Controller ，即在查找的时候，不会去查找请求的是哪个 Controller，因为它将所有的 Controller 的方法都作为一个 HandlerMethod  组件，存储在一个 map 集合中
+简单总结一下：
 
-在 Spring MVC 眼里，对于用户的请求，只有 RequestMappingInfo 这一种匹配方式，只要用户请求的 request 匹配某个 RequestMappingInfo ，那么就直接获取映射的 HandlerMethod ，选定的这个 HandlerMethod 就是用来处理用户请求的
+```java
+我们在 Controller 中对于每个方法都会使用 @RequestMapping 注解，并且标记上对应的 HTTP 类型 和 url 参数
 
+Spring MVC 在启动时会将每个 Controller 分解细化为多个方法级别的 HandlerMethod 组件，
+    它将每个 @RequestMapping 封装成 RequestMappingInfo 对象，然后再将获取它注解的方法对象 Method，使用一个 Map 进行映射，这样如果 RequestMappingInfo 符合用户 request，那么就可以直接获取到调用的方法的 Method 对象进行执行
 
-
-> RequestMappingHandlerMapping 什么时候处理好 HandlerMethod 的？
-
-`start`
-
-RequestMappingHandlerMapping 的父类 AbstractHandlerMapping 实现了 InitializingBean 接口，它有一个 afterPropertiesSet()
-
-学过 Spring 应该知道，该方法在 第七次后置处理器 调用完后会调用 bean 的该方法
-
-在 AbstractHandlerMapping bean 创建过程中，在第七次后置处理器调用完成后，会调用该方法，然后遍历所有的 bean，从中找到 Controller，获取 Controller 中存在 @RequestMapping 注解的方法，将 它 和 它注解的 @RequestMapping 得到的 RequestMappingInfo 对象 形成映射关系，注册进 mappingRegistry 对象中
+在 RequestMappingInfo 中，它对外提供了一个接口，可以通过该接口进行 用户 request 的匹配，如果匹配成功，那么返回 true，那么就表示该 RequestMappingInfo 可以进入用户 request 的候选中（因为可能存在多个匹配，后续需要进行排序）
+```
 
 
+
+> #### RequestMappingHandlerMapping 什么时候将 Controller 转换为 HandlerMethod 的？
+
+
+
+RequestMappingHandlerMapping 的父类 AbstractHandlerMapping **实现了 InitializingBean 接口，重写了afterPropertiesSet()**
+
+学过 Spring 应该知道，该方法在 **第七次后置处理器 和 第八次后置处理器之间 会调用 afterPropertiesSet()**
+
+在 AbstractHandlerMapping 这个 bean 创建过程中，第七次后置处理器调用完成后，会调用它重写的 afterPropertiesSet() 方法，然内部会通过 BeanFactory 获取所有的 bean，从中找到 Controller bean，然后进行分解， 将 方法对象 封装成 HandlerMethod，将 @RequestMapping 封装 RequestMappingInfo，然后存储到 map 中 形成映射关系
 
 ```java
 public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMapping implements InitializingBean {
@@ -394,24 +402,16 @@ public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMap
     
     protected void initHandlerMethods() {
         /*
-        遍历所有的 beanName，只处理 Controller 之类的 bean
-        在 AbstractHandlerMethodMapping 第七次后置处理器调用完成后，
-        调用 afterPropertiesSet() 后来这里处理 Controller
+            遍历所有的 beanName，只处理 Controller 之类的 bean
+            在 AbstractHandlerMethodMapping 第七次后置处理器调用完成后，
+            调用 afterPropertiesSet() 后来这里处理 Controller
         */
 		for (String beanName : getCandidateBeanNames()) {
 			if (!beanName.startsWith(SCOPED_TARGET_NAME_PREFIX)) {
-				processCandidateBean(beanName);
+				detectHandlerMethods(beanName);
 			}
 		}
 		handlerMethodsInitialized(getHandlerMethods());
-	}
-    
-    protected void processCandidateBean(String beanName) {
-		Class<?> beanType = obtainApplicationContext().getType(beanName);
-		if (beanType != null && isHandler(beanType)) {
-            //主要处理逻辑
-			detectHandlerMethods(beanName);
-		}
 	}
     
     protected void detectHandlerMethods(Object handler) {
@@ -450,7 +450,7 @@ public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMap
 }
 ```
 
-`end`
+
 
 ## 5、HandlerAdapter 组件
 
@@ -466,7 +466,7 @@ public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMap
 
 
 
-> 为什么要使用适配器？
+> #### 为什么要使用适配器？
 
 `start`
 
@@ -486,11 +486,11 @@ HandlerMapping 存在多个实现类，并且每个实现类返回的 handler �
 
 简单来讲，所谓的适配器就是将不同的 handler 的处理逻辑抽象成一个个的类，并且这些类实现同一个接口，方便统一管理
 
-适配器模式就是为了让存在差异的多个类适配同一套方案
+**适配器模式就是为了让存在差异的多个类适配同一套方案**
 
-对于 FutureTask 来说，就是为了让 Runnable 适配 Callable 的方案
+- 对于 FutureTask 来说，就是为了让 Runnable 适配 Callable 的方案
 
-对于 HandlerAdapter 来说，就是为了解耦，使得 DispatcherServlet 对于 handler 的扩展不需要轻易修改代码，让所有的 handler 类型都适配 DispatcherServlet 定义的这一套处理流程
+- 对于 HandlerAdapter 来说，就是为了解耦，使得 DispatcherServlet 对于 handler 的扩展不需要轻易修改代码，让所有的 handler 类型都适配 DispatcherServlet 定义的这一套处理流程
 
 `end`
 
@@ -597,7 +597,7 @@ handle() 有两种处理情况：
 
 
 
-> ### 1、处理 JSON
+> #### 1、处理 JSON
 
 假设我们请求 user/1，最终返回的应该是 `不得了`JSON 字符串
 
@@ -737,7 +737,7 @@ public boolean supportsReturnType(MethodParameter returnType) {
 
 
 
-> ### 2、HTML 页面
+> #### 2、HTML 页面
 
 假设我们请求 user/1，最终返回的应该是 `不得了.html`页面
 

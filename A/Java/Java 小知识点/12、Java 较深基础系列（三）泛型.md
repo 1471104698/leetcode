@@ -1,8 +1,10 @@
 # 泛型
 
-具体看 <https://zhuanlan.zhihu.com/p/240003959>
 
-​	<https://zhuanlan.zhihu.com/p/255264414>
+
+ [泛型概述(上)：泛化与特定 - 知乎 (zhihu.com)](https://zhuanlan.zhihu.com/p/240003959) 
+
+ [泛型概述(下)：泛型实现机制 - 知乎 (zhihu.com)](https://zhuanlan.zhihu.com/p/255264414) 
 
 
 
@@ -76,93 +78,84 @@ public class ArrayList<T> {
 
 ## 2、泛型底层实现原理
 
-我们定义如下的类和方法：BaseDao 使用泛型 T，而 UserDao 继承了 BaseDao，同时指定泛型为 User
+ [Java泛型-4（类型擦除后如何获取泛型参数） - 简书 (jianshu.com)](https://www.jianshu.com/p/cb8ff202797c) 
+
+
+
+这里简述下泛型的实现原理：
 
 ```java
-public class GenericDemo {
-    public static void main(String[] args) {
-        UserDao userDao = new UserDao();
-        User user = userDao.get(new User());
-        List<User> list = userDao.getList(new User());
-    }
-}
+Java 的泛型是伪泛型，相当于是一个语法糖：
+它只在程序的源代码中出现，而在编译的时候，通过泛型擦除，将泛型参数全部替换为原生类型（如果没有设置下界，那么默认是 Object），而在相应调用的地方将 原生类型 添加上类型强转的代码
 
-class BaseDao<T> {
-    public T get(T t){
-        return t;
-    }
-    public List<T> getList(T t){
-        return new ArrayList<>();
-    }
-}
-
-class UserDao extends BaseDao<User> {}
-class User{}
+因此对于运行时期的 ArrayList<Integer> 和 ArrayList<String> 来说，实际上它们都是 ArrayList<Object>
+    只不过在调用的时候会进行强转，比如 (Integer)list.get(0) 和 (String)list.get(0)
+    
+因此这个伪泛型的意思就是，通过代码来指定某个类的泛型类型，但是编译底层是通过代码强转来实现的
 ```
 
 
 
-通过编译得到字节码，再通过反编译字节码得到如下代码：
+以下是泛型实现的具体讲解：
 
 ```java
-public class GenericDemo {
-	// 编译器会为我们自动加上无参构造器
-    public GenericDemo() {}
+class Test<T> {
+    private T data;
+    private Set<String> set = new HashSet<>();
 
+    public boolean isBoolean(Test<T> data) {
+        Map<String, String> map = new HashMap<>();
+        map.put("hello", "world");
+        map.put("你好", "世界");
+        System.out.println(map.get("hello"));
+        return true;
+    }
+    public static void main(String[] args) {
+        Test<Integer> test = new Test<>();
+    }
+}
+```
+
+
+
+反编译 class 文件得到编译时期的类源代码：
+
+```java
+class Test {
+    private Object data;
+    private Set set;
+    Test(){
+        set = new HashSet();
+    }
+    public boolean isBoolean(Test data) {
+        Map map = new HashMap();
+        map.put("hello", "world");
+        map.put("你好", "世界");
+        System.out.println((String)map.get("hello"));
+        return true;
+    }
     public static void main(String args[]) {
-        UserDao userDao = new UserDao();
-        //这里调用后编译器自动添加类型转换
-        User user = (User)userDao.get(new User());
-        //List<User> 变成 java.util.List
-        java.util.List list = userDao.getList(new User());
+        Test test = new Test();
     }
-}
-
-class BaseDao {
-    BaseDao() {}
-    
-    public Object get(Object t) {
-        return t;
-    }
-    //List<T> 变成 List
-    public List getList(Object t) {
-        return new ArrayList();
-    }
-}
-
-// BaseDao<User> 变成 BaseDao
-class UserDao extends BaseDao {
-    UserDao(){}
-}
-
-class User {
-    User() {}
 }
 ```
 
 通过反编译字节码可以发现以下几点改变：
 
 - 当没有构造器的时候编译器会自动加上无参构造器
-- baseDao 的泛型 T 全部被替换成 Object，并且 UserDao 指定的 <User> 也被消除了
-- 当得到某个泛型结果 `User user = (User)userDao.get(new User());` 编译器会自动将 Object 进行强转为 User
-
-因此实际上**所谓的 泛型 在编译的时候使用 Object 替换掉 T，这就是泛型擦除**
-
-泛型 实际上就是在编译期间做了两件事：
-
-- 在编译时限制指定类型的元素添加，如果不是指定的类型，则会报错
-- 在获取元素时会自动将 Object 强转为 指定的类型
+- 泛型 T 全部被替换成 Object 或者 删除
+- 泛型擦除后，编译器会自动在调用的地方添加类型强转的代码
 
 
 
 因此，我们可以作此结论：	
 
-- 编译期间会将所有的泛型全部擦除，在只生命了 T 的情况下，T 会转变成 Object，如果是 A <T extends B> 的话，这与泛型擦除就是将 T 变成 B，这里的 Object 和 B 称为原始类型
+- 编译期间会将所有的泛型全部擦除，删除 <T> 或者转换为原生类型，在只声明为 T 的情况下，T 会转变成 Object，如果是 <T extends B> 的话，那么就是将 T 变成 B，这里的 Object 和 B 称为原始类型
 
 - 在 JVM 中是没有泛型的，只有普通的类和方法，因为在编译成 class 文件期间就已经被擦除了，指向的时候 JVM 已经不知道是什么类型了
 - 泛型擦除的只是字节码表面上的泛型，元数据中实际上还是保存了类的泛型类型的，因此 JVM 可以通过反射获取泛型
 
-具体看 <https://www.jianshu.com/p/cb8ff202797c>
+
 
 
 
@@ -172,9 +165,9 @@ class User {
 
 ### 1、基本数据类型不能使用泛型
 
-使用泛型擦除，将泛型 T 转换为 原始类型 Object ，这是因为默认所有的类都继承了 Object，后面可以进行强转
+使用泛型擦除，将泛型 T 转换为 原生类型（Object）
 
-而这也意味着 基本数据类型 是不能作为泛型的，因为它们不是一个类，没有父类 Object 的说法
+这也意味着 基本数据类型 是不能作为泛型的，因为它们不是一个类，没有原生类型 的说法
 
 因此才会出现 Integer 之类的包装类来代替 int 这些基本数据类型
 
@@ -346,9 +339,16 @@ class cur.B extends cur.A<java.lang.String> {
 
 从反编译结果来看，B 类中存在 4 个方法，前两个是我们自己重写的方法，后两个是编译器编译时期生成的桥方法
 
-在桥方法中调用了我们重写的方法，可以看到两个桥方法的参数都是 Object，即这两个桥方法才是真正意义上覆盖了父类的方法，即真正意义上重写的方法
+在桥方法中调用了我们重写的方法，可以看到**两个桥方法的参数都是 Object，即这两个桥方法才是真正意义上覆盖了父类的方法，即真正意义上重写的方法**
 
 即方法重写的实现是：编译器自己生成桥方法覆盖父类的方法，然后在内部调用我们自己意义上重写的方法，然后在方法表上的是桥方法，从而将我们自己重写的方法隐藏起来了，使得重写不会由于 泛型擦除 而失效
+
+
+
+因此，**在讲方法重写的时候，如果涉及到泛型，那么从两方面讲起：**
+
+1. JVM 方法区的虚方法表 + 编译期间确定重载的方法 + 运行期间确定重写的方法
+2. 在泛型的情况下，需要使用桥接方法来覆盖父类的方法，然后在桥接方法中调用子类用来重写的方法
 
 
 
@@ -443,8 +443,6 @@ public class ArrayList extends AbstractList
 
 
 
-
-
 因此，我们就可以对 泛型的上下界进行说明了：
 
 - <? super A> 表示下界，List<? super A> 表示指向的对象声明的泛型必须是 **A 类 或者 是 A 的父类**
@@ -522,7 +520,7 @@ class F extends A {
     */
     ```
 
-- 对于 add() 方法，由于编译器只能确定对象的泛型类型必定是 A 类 或者 A 的父类，这样的话能够添加的对象类型也必须基于这一特点，而不会出现数据类型混乱，这样的话它能够添加的对象类型必须是 A 类 或者  A 的子类，因为这样的话无论右边指定的对象类型为何，A 类 和 A 的子类必定都满足 "指定的对象类型的子类" 这一条件，**根据多态自然没有问题**
+- 对于 add() 方法，由于编译器只能确定对象的泛型类型必定是 A 类 或者 A 的父类，这样的话能够添加的对象类型也必须基于这一特点，而不会出现数据类型混乱，这样的话它**能够添加的对象类型必须是 A 类 或者  A 的子类**，因为这样的话无论右边指定的对象类型为何，都保证了是 A 类或者 A 的子类，后面可以统一转换为 A 类，满足多态
 
   - ```java
     List<? super A> list = new ArrayList<A>();

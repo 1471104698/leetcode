@@ -29,6 +29,8 @@ OOP 对象头结构如下：
 
 普通对象的 OOP 对象头内部维护了 _mark 和 元数据指针 _metadata
 
+​					（如果是数组，那么还有一个 array_length 来记录数组长度）
+
 ```C++
 // hotspot/src/share/vm/oops/oop.hpp
 class oopDesc {
@@ -90,7 +92,7 @@ class markOopDesc: public oopDesc {
 | 偏向锁   | **JavaThread**（Thread ID）              | **epoch**（撤销次数） | GC 年龄 | 1（偏向锁）   | 01     |
 | 轻量级锁 | 指向线程栈中 Lock Record 的指针（30bit） |                       |         |               | 00     |
 | 重量级锁 | 指向监视器（monitor）的指针（30bit）     |                       |         |               | 10     |
-| GC标记   | 空                                       |                       |         |               | 11=    |
+| GC标记   | 空                                       |                       |         |               | 11     |
 
 - 当为无锁状态时，_mark 中有 23bit 是表示 hashCode 的，有 2bit 是空的，有 4bit 是 GC 年龄的，有 1bit 是偏向锁标志，有 2bit 是锁标志位
 - 当为偏向锁状态时，_mark 中有 25bit 分别表示 JavaThread 和 Epoch，有 4bit 是 GC 年龄，有 1bit 是偏向锁标志，有 2bit 是锁标志位
@@ -186,7 +188,7 @@ _EntryList：维护的是 阻塞在 同步代码块处 的线程，类似 AQS �
 
 monitorenter 指令调用的是 EnterI() 函数
 
-该函数分为以下几步：
+EnterI() 函数分为以下几步：
 
 - 调用 Trylock() 进行 CAS 尝试将 ObjectMonitor 中的 owner 指针指向当前线程，如果 CAS 成功，那么表示当前线程获取锁
 - CAS 失败，那么表示已经有线程获取锁，那么当前线程就需要 park 挂起
@@ -238,9 +240,15 @@ void ObjectMonitor::exit(bool not_suspended, TRAPS) {
 
 我们可以看到，它内部根据 QMode 的值进行不同的决策，为什么需要进行这种决策？
 
-这里需要讲下 EntryList 和 WaitSet 的关系：
 
-当我们调用 wait() 时，线程会封装为 ObjectWaiter 节点进入到 WaitSet 中，而当线程被唤醒时，那么肯定是不可能直接获取锁的，它需要去竞争，此时 ObjectWaiter 就会从 WaitSet 中转移到 EntryList 中
+
+这里需要讲下 CXQ、EntryList 和 WaitSet 的关系：
+
+最开始的线程在 sync 处阻塞是进入 CXQ 队列中的，只有线程获取锁，并且调用了 wait() 后被唤醒，因为需要再次获取锁才能够执行，它不会再次进入 CXQ 队列，而是会进入到 EntryList 队列
+
+即进入到 EntryList 中的节点必定进入过 WaitSet 队列
+
+（转移思路跟 AQS 一样，都是 Node/ObjectWaiter 节点在进行转移）
 
 ```java
 这里可以看出，AQS 实际上是按照 sync 锁的思路来实现的
@@ -348,11 +356,11 @@ public class A {
 
 ## 4、锁升级过程
 
+[synchronized 底层如何实现？什么是锁升级、降级？ - 云+社区 - 腾讯云 (tencent.com)](https://cloud.tencent.com/developer/article/1625437)
+
 
 
 ### 4.1、偏向锁
-
-[偏向锁](https://blog.csdn.net/sinat_41832255/article/details/89309944)
 
 
 
@@ -376,9 +384,12 @@ public class A {
 
 > #### 偏向锁的获取：
 
-线程访问同步代码块 synchronized，发现对象头，判断锁标志位，如果为 01，那么判断 偏向标志位，如果为 0，那么表示无锁，通过一次 CAS 将对象头上的 JavaThread 指向当前线程，表示获取了锁，将偏向锁标志位设置为 1，这样锁的标志为 1|01，此后在没有其他线程竞争的情况下，这把锁一直由该线程持有，不会主动释放锁。
+偏向锁获取过程如下：
 
-**但一旦出现第二个线程来获取这把锁，那么无论持有偏向锁的线程存活，那么都会升级为轻量级锁**（亲测）
+- 线程访问同步代码块 synchronized，发现对象头，判断锁标志位
+- 如果为 01，那么判断 偏向标志位，如果为 0，那么表示无锁，通过一次 CAS 将对象头上的 JavaThread 设置为当前线程，同时将 偏向锁标志位 设置为 1，这样锁的标志为 1 | 01，此后在没有其他线程竞争的情况下，这把锁一直由该线程持有，它不会主动释放锁。
+- 如果为 1，表示已经有线程获取了锁，那么需要升级为轻量级锁（无论持有锁的线程是否存活，是否需要这把锁）
+  - 即**一旦出现第二个线程来获取这把锁，那么无论持有偏向锁的线程存活，那么都会升级为轻量级锁**（亲测）
 
 
 
@@ -391,6 +402,8 @@ public class A {
 即偏向锁的获取只有在 锁标志为 0|01 即，JavaThread 为空 的无锁状态进行 CAS，然后 JavaThread 指向当前线程
 
 加锁就是将 _mark 前 23bit 的数据替换为 JavaThread，因此没有位置不能存储 hashCode
+
+
 
 > #### 偏向锁的撤销：
 
@@ -439,7 +452,7 @@ public class A {
 
 > #### 轻量级锁的获取：
 
-当前 obj 为轻量级锁，即 对象头的 锁标志位 为 00
+当前 obj 为轻量级锁，即 对象头的 锁标志位 为 0 | 00
 
 **没有线程获取锁的情况下：**
 
@@ -473,20 +486,17 @@ public class A {
 
 
 
-```
-重量级锁使用到 _mark 中的 ObjectMonitor 对象
-```
-
 加锁就是将 _mark 前 30 bit 的数据替换为 ObjectMonitor 对象的指针
 
 由于重量级锁线程 在 同步代码块处 获取不到锁就会陷入阻塞状态，而 park() 阻塞和 unpark() 唤醒 都需要经过用户态和内核态的切换，效率低，所以在进入重量级锁之前设置了一个 偏向锁 和 轻量级锁
 
 
 
-**特殊的 锁升级过程：**
+> #### 特殊的 锁升级情况
 
-- 当偏向锁 或者 轻量级锁调用 wait() 时，由于它们本身不存在 WaitSet 这种数据结构来存储等待的线程，所以会膨胀为轻量级锁
-- 由于偏向锁没有内容存储 hashCode，所以当首次调用未重写的 hashCode() 时，偏向锁会膨胀为重量级锁（具体看下面，这里只是先讲）
+- 当偏向锁 或者 轻量级锁调用 wait() 时，由于它们本身不存在 WaitSet 这种数据结构来存储等待的线程，所以会膨胀为重量级锁
+- 当对象正在使用锁时，无论是偏向锁还是轻量级锁，一旦调用了 hashCode()，那么就会升级为重量级锁
+- 当对象没有使用锁时，那么调用 hashCode() 后，如果是偏向锁，那么升级为轻量级锁，如果是轻量级锁，那么不变
 
 
 
@@ -537,7 +547,7 @@ System 提供了这个方法：System.identityHashCode(Object o)
 
 通过图示的不同状态下的 _mark 结构，我们可以发现，**偏向锁状态中没有位置存储 identity hash code，原先无锁状态用于存储 hashCode 的 23bit 被 JavaThread 占用**
 
-而线程获取偏向锁又没有去保存被替换的数据，因此一旦计算了 hashCode，那么就无法使用偏向锁，如果处于偏向锁状态时计算了 hashCode，那么**偏向锁就会膨胀为轻量级锁**（亲测）
+因此一旦计算了 hashCode，那么就无法使用偏向锁，如果处于偏向锁状态时计算了 hashCode，那么根据 `此时是否存在线程正在使用锁`来判断锁的升级（具体看上面重量级锁时讲解的 “**特殊的锁升级情况**”）
 
 
 
@@ -553,7 +563,7 @@ System 提供了这个方法：System.identityHashCode(Object o)
 
 ## 6、synchronized 和 lock 的区别
 
-> ### synchronized
+> #### synchronized
 
 - 修饰方法和代码块
 - 可重入，并且有 偏向锁、轻量级锁、重量级锁 三种，会根据竞争情况进行锁升级
@@ -563,7 +573,7 @@ System 提供了这个方法：System.identityHashCode(Object o)
 
 
 
-> ### lock
+> #### lock
 
 - 具有灵活性，**灵活性在于可以手动上锁和释放锁，并且可以指定等待锁的时间，不会死等**，线程池中 Worker 类 就继承了 AQS，赋予了 tryAcquire() 锁的语义，当调用 shutdown() 的时候线程池可以调用 tryLock() 判断线程是否空闲
 - 能够保证可见性（**由于 state 是 volatile 的，所以释放锁，即修改 state 的时候，会将前面的操作一并刷新入内存，这样其他线程看得到了**）
@@ -571,9 +581,141 @@ System 提供了这个方法：System.identityHashCode(Object o)
 - 可以配套使用 `lock.newCondition()` 来指定不同类型的锁对象，可以方便唤醒某种类型的线程，用于生产者消费者模式
 - 发生异常不会自动释放锁，所以需要记住在 finally 处调用 unlock()
 
-lock 的灵活性使得可以避免无限期的阻塞，以及可以用来线程池判断线程的状态
+lock() 具有灵活性，比如 lock() 可以达到 sync 锁的效果，tryLock() 可以尝试获取一次锁，失败就返回，tryLock(long) 可以超时等待获取锁，lockInterruptibly() 可以中断获取锁
 
-**使用 tryLock(int time) 可以被设置等待超时时间，期间还可以被中断，不过使用 lock() 无法中断，因为线程在同步对象中会调用 park() 挂起，不会去识别中断标识符**
+同时还可以设置公平锁和非公平锁
 
 
+
+## 7、偏向锁、轻量级锁、重量级锁 升级过程测试代码
+
+先添加依赖：
+
+```xml
+<!-- JOL依赖 -->
+<dependency>
+    <groupId>org.openjdk.jol</groupId>
+    <artifactId>jol-core</artifactId>
+    <version>0.9</version>
+</dependency>
+```
+
+具体代码：
+
+```java
+class A{
+    public static void main(String[] args) throws Exception {
+        // 无锁();
+        // 偏向锁();
+        // hashCode偏向锁();
+        // 轻量级锁();
+        // hashCode轻量级锁();
+        // 重量级锁();
+        wait重量级锁();
+    }
+
+    public static void 无锁(){
+        A a = new A();
+        System.out.println(ClassLayout.parseInstance(a).toPrintable());
+    }
+
+    public static void 偏向锁() throws Exception {
+        //JVM 启动后延迟 4s 开启偏向锁，所以这里需要等待至少 4s
+        Thread.sleep(5000);
+        A a = new A();
+        synchronized (a) {
+            System.out.println(ClassLayout.parseInstance(a).toPrintable());
+        }
+    }
+
+    public static void hashCode偏向锁() throws Exception {
+        //JVM 启动后延迟 4s 开启偏向锁，所以这里需要等待至少 4s
+        Thread.sleep(5000);
+        A a = new A();
+        a.hashCode();
+        synchronized (a) {
+            System.out.println(ClassLayout.parseInstance(a).toPrintable());
+        }
+    }
+
+    public static void 轻量级锁() throws Exception {
+        Thread.sleep(5000);
+        A a = new A();
+        Thread t1 = new Thread(() -> {
+            synchronized (a){
+                System.out.println("t1 locking");
+                System.out.println(ClassLayout.parseInstance(a).toPrintable()); //偏向锁
+            }
+            System.out.println("退出同步代码块");
+        });
+        t1.start();
+        t1.join();
+        System.out.println(t1.getState());
+        Thread.sleep(5000);
+        synchronized (a){
+            System.out.println("main locking");
+            System.out.println(ClassLayout.parseInstance(a).toPrintable());//轻量锁
+        }
+    }
+
+    public static void hashCode轻量级锁() throws Exception {
+        Thread.sleep(5000);
+        A a = new A();
+        a.hashCode();
+        Thread t1 = new Thread(() -> {
+            synchronized (a){
+                System.out.println("t1 locking");
+                System.out.println(ClassLayout.parseInstance(a).toPrintable()); //偏向锁
+            }
+            System.out.println("退出同步代码块");
+        });
+        t1.start();
+        t1.join();
+        Thread.sleep(1000);
+        synchronized (a){
+            System.out.println("main locking");
+            System.out.println(ClassLayout.parseInstance(a).toPrintable());//轻量锁
+        }
+    }
+
+    public static void 重量级锁() throws Exception {
+        A a = new A();
+        Thread t1 = new Thread(() -> {
+            synchronized (a){
+                System.out.println("t1 locking");
+                System.out.println(ClassLayout.parseInstance(a).toPrintable());
+            }
+        });
+        t1.start();
+        synchronized (a){
+            System.out.println("main locking");
+            System.out.println(ClassLayout.parseInstance(a).toPrintable());
+        }
+    }
+
+    public static void wait重量级锁() throws Exception {
+        A a = new A();
+        Thread t1 = new Thread(() -> {
+            synchronized (a){
+                try {
+                    a.wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                System.out.println("t1 locking");
+                System.out.println(ClassLayout.parseInstance(a).toPrintable());
+            }
+        });
+        t1.start();
+        //避免 t1 和 t2 进行竞争
+        Thread.sleep(2000);
+        Thread t2 = new Thread(() -> {
+            synchronized (a){
+                a.notify();
+            }
+        });
+        t2.start();
+    }
+}
+```
 

@@ -4,15 +4,23 @@
 
 ## 1、何为浅拷贝，何为深拷贝？
 
-浅拷贝：开辟新的内存创建新的 OOP 对象，但是 OOP 对象中的变量内容全部跟 原来的对象一样，如果是变量是引用对象，那么相当于是拷贝一份指针
+浅拷贝：开辟内存创建一个新的 OOP 对象，然后将旧对象的 OOP 对象体 全部拷贝到新的内存上，即如果是引用类型，那么拷贝的是指针
 
-深拷贝：内部的变量全部重新创建，而不是拷贝引用指针
+```
+这里一个小的知识点：
+当执行 A a = (A)a.clone() 时
+	如果 a 的 _mark 存在锁，无论是 偏向锁 101、轻量级锁 00 还是 重量级锁 10，a1 的 _mark 都是偏向锁状态 101
+	如果 a 的 _mark 无锁，那么 a1 的 _mark 也是无锁状态 001
+（通过 JOL 查看对象的内存布局）
+```
+
+深拷贝：内部的引用对象重新创建，而不是拷贝引用指针
 
 
 
 ## 2、浅拷贝实现 - clone()
 
-clone() 是 Object 内部的 native 方法，所以实现不是 java 语言实现的（后续会根据个人的猜想如何实现的）
+**clone() 是 Object 内部的 native 方法**
 
 因为 Object 是所有的类的父类（包括 Class 类），因此它们都存在 clone() 方法
 
@@ -22,7 +30,6 @@ clone() 是 Object 内部的 native 方法，所以实现不是 java 语言实�
 
 ```java
 class F {
-    //年龄
     public int age;
 }
 
@@ -57,21 +64,6 @@ public class A implements Cloneable {
         System.out.println(a.i);    //2
         System.out.println(a1.i);   //4
     }
-
-    /*
-    这里重写的 clone() 方法没有任何作用，因为内部实际上调用的 super.clone() 还是调用的 Object 的 clone() 
-    我们自身并没有做什么别的操作
-    */
-    @Override
-    protected Object clone(){
-        A a = null;
-        try {
-            a = (A) super.clone();
-        } catch (CloneNotSupportedException e) {
-            e.printStackTrace();
-        }
-        return a;
-    }
 }
 ```
 
@@ -79,9 +71,7 @@ public class A implements Cloneable {
 
 我们可以看出 Object 自己的普通的 clone() 方法只是创建一个外层的 OOP 对象，但是对于内层的变量数据全都是简单的拷贝一份，比较基本数据类型就是直接拷贝数据，对于引用类型就是直接拷贝引用指针，即引用类型是直接原对象 和 拷贝对象共用的
 
-我们可以推测 Object 的 clone() 实现是，**创建一个外层的一个 OOP 对象 a1，然后将 原对象 a 的 OOP 对象体 整个复制 到 克隆的 OOP 对象 a1 的 对象体中**
-
-这实际上就是类似于以下代码：
+我们可以推测 Object 的 clone() 实现类似于以下代码：
 
 ```java
 public A clone(){

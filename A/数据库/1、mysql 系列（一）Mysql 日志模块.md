@@ -193,15 +193,77 @@ redo log 没有事务性，一旦某个事务 rollback 回滚了，redo log buff
 
 ## 3、bin log
 
-
-
 [redo log 和 bin log（一）](https://www.cnblogs.com/xibuhaohao/p/10899586.html )
 
-[redo log bin log（二）](https://www.cnblogs.com/a-phper/p/10006417.html)
+[redo log 和 bin log（二）](https://www.cnblogs.com/a-phper/p/10006417.html)
+
+[binlog 二进制文件解析](https://mp.weixin.qq.com/s/j987HNc74gRYHl6au24XSg)
 
 
 
 bin log 全称为 binary log（二进制文件），数据都是二进制形式的
+
+![img](https://mmbiz.qpic.cn/mmbiz_png/pmczaLVFxOIc3VpuzVUaCib7FWbZNo0Z2lglZbb9KkDTZZ5gkb9z5Fia9Bp8E3ClMOhVaaJe60VQp7ibeOMT17n6Q/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+
+binlog 只会记录 create、alter table、insert、delete、update 这些写操作，不会记录 select、show 读操作
+
+
+
+binlog 的数据结构：
+
+```java
+binlog 以 event 作为数据结构记录 update、delete、insert 等操作的
+每个 event 包括 Binlog event header、Post-Header 和 Body 三部分
+Binlog event header 中存在一个 event type 字段，用来表示该 event 的类型
+event type 的类型如下：
+    0x02 QUERY_EVENT
+    0x04 ROTATE_EVENT
+    0x0f FORMAT_DESCRIPTION_EVENT
+    0x10 XID_EVENT				//事务提交事件，记录事务的 xid
+    0x13 TABLE_MAP_EVENT		//操作的 table 表名
+    0x1d ROWS_QUERY_EVENT
+    0x1e WRITE_ROWS_EVENTv2		//insert 事件
+    0x1f UPDATE_ROWS_EVENTv2	//update 事件
+    0x20 DELETE_ROWS_EVENTv2	//delete 事件
+    0x21 GTID_EVENT
+    0x22 ANONYMOUS_GTID_EVENT
+    0x23 PREVIOUS_GTIDS_EVENT
+
+
+其中，insert 和 delete 两种 event 只有 event type 不同，其他的数据都相同，即只要将 event type 进行修改，替换下事件类型，就可以从 insert 变成 delete
+
+假设执行 sql 如下：
+insert into test
+values(1,2.222222222,now(),now(),'abc');
+
+该 event 各部分数据如下：
+1）event type：insert
+2）Post-Header 忽略
+3）Body：
+01 00 00 00：首列是int，插入的值为1。
+
+c2 79 bf 71 1c c7 01 40：第二列是double，上面已经看到sizeof(double)为8。
+
+5a  b2 2e 5a ：第三列值为1521626714，代表写入的now()的时间戳。
+
+99 9f 6b 21 4e：第四列，此处代表'2018-03-21 18:05:14'，是datetime类型字段。
+
+03 61 62 63：第五列，首先03代表位数，之后便是abc字符串。
+```
+
+对于 binlog，简单讲就是会以 event 数据结构的形式记录所有的写操作，通过 event type 记录事件的类型，在 body 中记录事件对应的数据，比如  insert，它会先通过一个 event_)type = Table_map 的  event，然后再通过一个 event_type = Write_rows 的 event 来记录插入的数据
+
+这里有点像 Java 的操作数栈，操作的对象和方法是分开存储的，在操作的时候先将对象压入到操作数栈，然后再压数据
+
+
+
+图形化界面查看 binlog 数据内容
+
+![image.png](https://pic.leetcode-cn.com/1607436385-iHzbfy-image.png)
+
+
+
+
 
 **bin log 和 redo log 的区别**：
 

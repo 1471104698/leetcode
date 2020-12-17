@@ -1,6 +1,8 @@
 # redis 分布式锁
 
-具体看    https://juejin.im/post/6844904082860146695 
+
+
+[细说Redis分布式锁🔒](https://juejin.cn/post/6844904082860146695 )
 
 ## 1、setnx + expire
 
@@ -36,7 +38,7 @@ set a 2 EX 30 NX 解读：
 
 
 
-> ### setnx + expire 的问题
+> #### setnx + expire 的问题
 
 如果不设置超时时间，那么一旦获取锁的进程崩了，那么这个锁将无法得到释放
 
@@ -84,17 +86,18 @@ lua 脚本是使用 redis 的 eval 命令来执行
 无论 lua 脚本内部多少指令，它都是通过一条 eval 命令去执行的，内部自动保证原子性
 
 ```lua
--- lua删除锁：
--- KEYS和ARGV分别是以集合方式传入的参数，对应上文的Test和uuid。
--- 如果对应的value等于传入的uuid。
-if redis.call('get', KEYS[1]) == ARGV[1] 
-    then 
-	-- 执行删除操作
-        return redis.call('del', KEYS[1]) 
-    else 
-	-- 不成功，返回0
-        return 0 
-end
+    -- lua 脚本删除锁：
+    -- KEYS 和 ARGV 分别是以集合方式传入的参数。
+	-- 这个集合是索引下标是以 1 开头的，KEYS[1] 是我们传入的 key，ARGV[1] 是我们传入的 uuid
+    -- 如果对应的 value 等于传入的 uuid。
+    if redis.call('get', KEYS[1]) == ARGV[1] 
+        then 
+        -- 执行删除操作
+            return redis.call('del', KEYS[1]) 
+        else 
+        -- 删除不成功，返回 0
+            return 0 
+    end
 ```
 
 
@@ -107,9 +110,9 @@ Redis 自己封装了一个 Redission 客户端，它内部使用 ReentrantLock 
 
 
 
-> ### 锁的重入
+> #### 锁的重入
 
-具体看  https://www.jianshu.com/p/a8b3473f9c24 
+[Redisson 分布式锁实现分析](https://www.jianshu.com/p/a8b3473f9c24 )
 
 
 
@@ -124,25 +127,28 @@ Redis 自己封装了一个 Redission 客户端，它内部使用 ReentrantLock 
 在上面，所有的 redis 指令都应该是在同一个 lua 脚本的
 
 ```java
-// 4.使用 EVAL 命令执行 Lua 脚本获取锁
-return commandExecutor.evalWriteAsync(getName(), LongCodec.INSTANCE, command,
-                                      //exists 命令，查询的是所有类型的 key，存在返回 1，否则返回 0
-                                      "if (redis.call('exists', KEYS[1]) == 0) then " +
-                                      //设置 key 下 field 的 value = 1
-                                      "redis.call('hset', KEYS[1], ARGV[2], 1); " +
-                                      //重新设置过期时间
-                                      "redis.call('pexpire', KEYS[1], ARGV[1]); " +
-                                      "return nil; " +
-                                      "end; " +
-                                      //hexists 命令，判断 hash 下某个 key field 是否存在
-                                      "if (redis.call('hexists', KEYS[1], ARGV[2]) == 1) then " +
-                                      //将 key field 的 value + 1，即重入度 +1
-                                      "redis.call('hincrby', KEYS[1], ARGV[2], 1); " +
-                                      //重新设置过期时间
-                                      "redis.call('pexpire', KEYS[1], ARGV[1]); " +
-                                      "return nil; " +
-                                      "end; " +
-                                      "return redis.call('pttl', KEYS[1]);",
+    return commandExecutor.evalWriteAsync(getName(), LongCodec.INSTANCE, command,
+                                          //exists 命令，判断 key 是否存在，如果不存在那么返回 0，执行下面代码
+                                          "if (redis.call('exists', KEYS[1]) == 0) then " +
+                                          	//设置 [key, field, value] 为 [key, uuid, 1]
+                                          "redis.call('hset', KEYS[1], ARGV[2], 1); " +
+                                          	//设置过期时间
+                                          "redis.call('pexpire', KEYS[1], ARGV[1]); " +
+                                          	//返回 null
+                                          "return nil; " +
+                                          	//结束
+                                          "end; " +
+                                          //如果 exists 返回 1
+                                          //那么执行 hexists 命令，判断 key 下的 field = uuid 是否存在
+                                          "if (redis.call('hexists', KEYS[1], ARGV[2]) == 1) then " +
+                                          	//如果存在，那么调用 incr 将它的重入度 +1
+                                          "redis.call('hincrby', KEYS[1], ARGV[2], 1); " +
+                                          	//设置过期时间
+                                          "redis.call('pexpire', KEYS[1], ARGV[1]); " +
+                                          "return nil; " +
+                                          "end; " +
+                                          //已经有线程加锁，并且加锁线程不是自己，调用 pttl 返回锁的过期时间
+                                          "return redis.call('pttl', KEYS[1]);",
 ```
 
 

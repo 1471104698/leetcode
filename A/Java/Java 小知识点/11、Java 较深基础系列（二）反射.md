@@ -36,7 +36,7 @@ Klass 对象中包含了某个类的所有元数据信息
 
  getFields、getMethods 和 getConstructors 获取该类的 public 变量 和 方法，包括父类的 public 变量 和 方法，包括 static 
 
-  getDeclaredFields、 getDeclaredMethods 和 getDeclaredConstructors 可以获取该类的所有 变量 和 方法，但是无法获取父类的变量和方法
+ getDeclaredFields、 getDeclaredMethods 和 getDeclaredConstructors 可以获取该类的所有 变量 和 方法，但是无法获取父类的变量和方法
 
 
 

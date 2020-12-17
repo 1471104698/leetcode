@@ -80,7 +80,9 @@ Node 保存 索引列 Hash 计算过后的 Hash 值 以及 指向的数据行的
 
 ![img](https://images.xiaozhuanlan.com/photo/2020/d03e9a1bda94819f46dc53ace46610d8.png)![img](https://images.xiaozhuanlan.com/photo/2020/77f494919bbd12605a768801960f9953.png)  
 
-  
+  ![img](https://img-blog.csdn.net/20170104204929966)
+
+
 
 
 

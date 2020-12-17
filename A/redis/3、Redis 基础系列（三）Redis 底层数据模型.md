@@ -153,7 +153,7 @@ set 使用 HashTable 很特别，**将 value 作为 Entry 的 key，将 null 作
 
 
 
-> ### 存储过程
+> #### 存储过程
 
 首先判断 对应的 set 是否存在，这个 set 是 redisObject，它的 ptr 指向数据存储集合
 
@@ -252,7 +252,7 @@ zset 底层实现有 ziplist、 skiplist 与 dict 的组合
 
 
 
-> ### ziplist
+> #### ziplist
 
 ![img](https://upload-images.jianshu.io/upload_images/6990035-4d859c25df76393e.png?imageMogr2/auto-orient/strip|imageView2/2/w/771/format/webp)
 
@@ -270,7 +270,7 @@ zset 底层实现有 ziplist、 skiplist 与 dict 的组合
 
 
 
-> ### skiplist（跳表）+ dict
+> #### skiplist（跳表）+ dict
 
 
 
@@ -385,6 +385,10 @@ unsigned long zslGetRank(zskiplist *zsl, double score, robj *o) {
 
 ### 1、SDS
 
+ [阅读redis代码（一）—— SDS数据结构 | Lynna's Blog (lynnapan.github.io)](https://lynnapan.github.io/2017/07/14/redis_sds/) 
+
+ [字符串对象 — Redis 设计与实现 (redisbook.com)](http://redisbook.com/preview/object/string.html) 
+
 
 
 对于 string 类型，如果数据是字符串，那么如果字符串长度 小于等于 39 个字节，编码方式为 embstr，大于 39 个字节，编码方式为 raw
@@ -418,7 +422,7 @@ class SDS{
 
 
 
-> ### 为什么 raw 和 embstr 默认界限是 39
+> #### 为什么 raw 和 embstr 默认界限是 39
 
 ```C
 #define LRU_BITS 24
@@ -456,35 +460,26 @@ typedef struct sdshdr {
 
 
 
-> ### SDS 和 C 语言字符串的差别
+> #### SDS 和 C 语言字符串的差别
 
 SDS 跟 C 语言字符串的存储有很大的不同：
 
 - SDS 内部维护了数组长度，而 C 语言没有，各自查询数组长度的时间复杂度为 O(1) 和 O(n)
 - SDS 和 C 的字符串数据都是以 字符 '\0' 结尾的，但是 C 是二进制不安全的，假设数据为 "abc\0 def\0"，它读取到第一个 '\0' 的时候就会退出了，会忽略后面的 def，而 SDS 不会，因为它维护了一个 len 字段，读取数据不是按照 '\0' 来结束读取的，而是按照 len 长度，因此 SDS 是二进制安全，既 SDS 可以存储 图片、音频等文件，因为里面会存在很多的 '\0'，而 C 不行
-- SDS 存在 预分配 和 惰性空间释放 ，预分配就是每次分配的 buf 会比实际需要的更长，减少字符串增长是带来的重新分配次数，惰性空间释放 就是字符串缩短时，不会立即回收不需要的空间，而是记录在 free 字段里，后面不需要再释放
+- SDS 存在 预分配 和 惰性空间释放 ，预分配就是每次分配的 buf 会比实际需要的更长，减少字符串增长是带来的重新分配次数，惰性空间释放 就是字符串缩短时，不会立即回收不需要的空间，而是记录在 free 字段里
 - 避免缓冲区溢出（数据覆盖）：对于 C ，如果在内存中存在两个相邻的字符串 s1 和 s2，如果对 s1 进行扩容的时候，由于没有重新进行内存分配，因此扩容的部分会将 s2 的数据覆盖掉，而 SDS 不会，它会根据 len 和 free 检查空间是否足够，如果不足，那么进行内存分配，防止数据覆盖
-
-
-
-空间预分配：
-
-- 若修改之后 sds 长度小于1MB,则多分配现有len长度的空间
-- 若修改之后sds长度大于等于1MB，则扩充除了满足修改之后的长度外，额外多1MB空间
-
-![img](https://i6448038.github.io/img/redis-data-struct/sds.gif)
-
-惰性空间释放：
-
-为了避免内存重新分配，缩短字符串后不会立马释放空间，可能后续字符串添加会使用到
-
-![img](https://i6448038.github.io/img/redis-data-struct/sds_free.gif)
 
 
 
 
 
 ### 2、ziplist
+
+ [Redis的List，从linkedlist和ziplist再到quicklist | Liexing's Blog](https://blog.liexing.me/2019/12/28/from-ziplist-linkedlist-to-quicklist/) 
+
+ [redis ziplist笔记 - 知乎 (zhihu.com)](https://zhuanlan.zhihu.com/p/85385662) 
+
+ [Redis 那么快之底层 ziplist 的奥秘！ - Java技术栈 - OSCHINA - 中文开源技术交流社区](https://my.oschina.net/javaroad/blog/4642765) 
 
 
 
@@ -513,7 +508,7 @@ SDS 跟 C 语言字符串的存储有很大的不同：
 
 **Entry 结构：**
 
-![img](https://i6448038.github.io/img/redis-data-struct/ziplist_entry.png)
+ ![img](https://img-blog.csdnimg.cn/20190430153651857.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3pnYW9x,size_16,color_FFFFFF,t_70) 
 
 对于 hash 和 zset 这种需要存储 key-value 形式的，key 会使用一个 Entry 节点存储，value 会使用另一个 Entry 节点存储
 
@@ -521,15 +516,7 @@ SDS 跟 C 语言字符串的存储有很大的不同：
 
 
 
-**元素遍历：**先定位到最后一个节点，然后从后往前遍历
-
-![img](https://i6448038.github.io/img/redis-data-struct/ziplist_bianli1.gif)
-
-![img](https://i6448038.github.io/img/redis-data-struct/ziplist_bianli2.gif)
-
-
-
-> ### ziplist 连锁更新问题：
+> #### ziplist 连锁更新问题：
 
 ziplist 存在一个 连锁更新问题
 
@@ -606,7 +593,7 @@ dict 使用的是 拉链法
 
 我们需要知道，**redis 底层管理 key 也是使用一个 dict，所以才不允许 key 重复**
 
-> ### dict 结构
+> #### dict 结构
 
 redis 中的 dict 是专门根据 redis 特性进行设计的，类似如下：
 
@@ -659,7 +646,7 @@ dict 即内部整合了两张哈希表，即 两个 HashMap，用于渐进式 re
 
 ![img](https://i6448038.github.io/img/redis-data-struct/hash1.png)
 
-> ### rehash
+> #### rehash
 
 **rehash 包括 扩容 和 收缩**
 
@@ -685,7 +672,7 @@ dict 即内部整合了两张哈希表，即 两个 HashMap，用于渐进式 re
 
 ![img](https://i6448038.github.io/img/redis-data-struct/hash_refresh_release.gif)
 
-> ### 渐进式 rehash
+> #### 渐进式 rehash
 
 具体看：<http://redisbook.com/preview/dict/incremental_rehashing.html>
 

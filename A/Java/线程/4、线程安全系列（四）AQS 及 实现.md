@@ -514,6 +514,33 @@ protected final boolean tryAcquire(int acquires) {
 
 
 
+> #### 关于 lock() 和 lockInterruptibly() 中断问题
+
+为什么 lockInterruptibly() 可以被 interrupt() 中断，而 lock() 不可以？
+
+是因为 lockInterruptibly() 不是用 park 挂起的吗？
+
+```java
+实际上 lockInterruptibly() 和 lock() 都是用 park 挂起的，并且调用的是相同的一个方法：parkAndCheckInterrupt()
+
+而 park() 过程中实际上会感知到 interrupt() 的，然后退出阻塞，但是退出后 lock() 和 lockInterruptibly() 两者的处理不同
+    
+lock()：
+    if (shouldParkAfterFailedAcquire(p, node) &&
+                    parkAndCheckInterrupt())
+                    interrupted = true;
+lockInterruptibly()：
+    if (shouldParkAfterFailedAcquire(p, node) &&
+                    parkAndCheckInterrupt())
+                    throw new InterruptedException();
+
+可以看出，
+    lock() 在被中断唤醒后，只记录被中断过，但是它并没有退出 for，因此在下一次循环中如果没有获取锁会继续 park
+    lockInterruptibly() 在被中断唤醒后，会直接抛出中断异常 InterruptedException，停止阻塞
+```
+
+因此，这说明了 park() 内部是会不断监听 interrupt 标志位的
+
 
 
 ## 4、AQS 的 Condition 机制

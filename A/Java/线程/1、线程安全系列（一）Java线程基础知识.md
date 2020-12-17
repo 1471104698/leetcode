@@ -4,47 +4,24 @@
 
 ## 1、sleep() 和 wait() 的区别
 
-sleep() 是 Thread 的静态方法，随时可以 进行调用，`Thread.sleep()`，它跟线程是否持有锁的状态无关，它不需要锁，调用后线程会挂起，如果持有锁的话也不会释放锁，因为说了跟锁无关，只是挂起后不会跟其他的线程争夺 CPU
+sleep() 是 Thread 的 static 方法，随时可以 进行调用，`Thread.sleep()`，它跟线程是否持有锁的状态无关，即就算持有锁也不会释放锁，只是 park 挂起后不会跟其他的线程争夺 CPU
 
 
 
-wait() 是Object 的方法，它是一个实例方法，任何对象都相当于是继承了父类 Object 的这个方法，调用某个对象的 wait() 就表示当前线程 进入以 某个对象为锁对象的同步队列中，它需要配合 syn 锁使用，
-
-- 如果syn 锁 锁的对象为 obj，那么后续调用 wait() 就应该用这个 obj 来调用，这样才能将线程放入 以 obj 作为锁对象的同步队列中
-- 如果 syn 锁 锁的对象为 this,那么表示锁 的是当前对象，那么直接调用当前对象的 wait() 即可，它会进入当前对象的同步队列
-
-
-
-它们都需要 捕获 中断异常，因为它们都可以被 线程的 interrupt()  方法打断，并且抛出中断异常
+wait() 是 Object 的方法，底层调用的是 另一个 本地方法 wait(0)，它必须在获取 sync 锁的情况下使用，会释放锁，同时会进入加锁对象的 ObjectMonitor 中的 WaitSet 队列中
 
 ```java
-public void h(){
-    Thread thread = new Thread(() -> {
-        synchronized (this) {
-            try {
-                wait();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-    });
-    thread.start();
-    thread.interrupt(); //可以打断 wait
+public final void wait() throws InterruptedException {
+    wait(0);
 }
-
-
-public void h(){
-    Thread thread = new Thread(() -> {
-        try {
-            Thread.sleep(1100);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-    });
-    thread.start();
-    thread.interrupt(); //可以打断 sleep
-}
+public final native void wait(long timeout) throws InterruptedException;
 ```
+
+
+
+它们都需要 捕获 中断异常
+
+（wait()、sleep()、join()、tryLock(long)、lockInterruptibly() 都是可以被中断的，而 sync 锁阻塞、lock() 阻塞都是不能被中断的）
 
 
 
@@ -60,7 +37,7 @@ wait(1000) 跟 wait() 的差别在于 **wait(1000) 不需要 notify() 来唤醒*
 
 
 
-## 2、线程等待的四种方式（多个线程等待，统一放行）
+## 2、线程等待的四种方式（了解即可）
 
 - 使用 CountDownLatch
 - 使用 CyclicBarrier
@@ -104,50 +81,26 @@ wait(1000) 跟 wait() 的差别在于 **wait(1000) 不需要 notify() 来唤醒*
 
 
 
-## 4、创建线程的 三 种方式
+## 4、创建线程的三种方式
 
 这里的线程 指代的是执行体，比如 run() 或者 call()，而不是 new 出来的一个对象
 
-- 继承 Thread 并重写 run()
+- 继承 Thread，由于 Thread 本身实现了  Runnable 接口，所以它有 run()，可以直接重写 run()
 - 实现 Runnable 接口 重写 run()，并通过 Thread 来运行
-- 实现 Callable 接口 并实现 call()（类似 run()）并使用 FutureTask 进行封装
-- 线程池的 execute() 和 submit()
+- 实现 Callable 接口 并实现 call()（类似 run()），同时需要使用 FutureTask 进行封装
 
 
 
 Runnable 和 Callable 的区别：
 
 1. Runnable 的方法体为 run()，没有返回值，Callable 的方法体为 call()，有返回值
-2. Callable 由于需要阻塞等待返回值，所以需要跟 FutureTask 配合使用，封装为一个 FutureTask
-3. Callable 的 call() 方法不是线程的最高层，所以它可以抛出异常，让 Futiure 的 get() 处理异常，而 Runnable 的 run() 是贤臣的最高层，所以它不能往上抛出异常，需要在 run() 内处理异常
-
-
-
-## 5、线程池的状态变化
-
-```java
-    private static final int RUNNING    = -1 << COUNT_BITS;
-    private static final int SHUTDOWN   =  0 << COUNT_BITS;
-    private static final int STOP       =  1 << COUNT_BITS;
-    private static final int TIDYING    =  2 << COUNT_BITS;
-    private static final int TERMINATED =  3 << COUNT_BITS;
-```
-
-RUNNING：运行中，这时候会接受新的任务，并且去执行
-
-SHUTDOWN：调用 shutdown()，表示线程池关闭，不接收新的任务，但会等待正在执行的线程执行完毕
-
-STOP：调用 shutdownNow()，表示立即关闭线程，不接收新的任务，同时会中断正在执行任务的线程
-
-TIDYING：在 SHUTDOWN 状态下，如果所有线程都执行完毕了，并且任务队列中的任务都销毁了 或者 在 STOP 状态下任务队列中所有任务都销毁了，那么会转换到这个状态，并且会执行钩子函数  terminated ()，线程池中默认 为空，需要用户去实现。这个钩子函数名为 terminated 跟下面的 终止状态名字一样，可以理解为最后的收尾工作
-
-TERMINATED：线程池的最终状态，表示线程池彻底终止了
+2. Callable 由于获取返回值需要进行阻塞等待，所以需要结合 FutureTask 使用，不能单独使用
 
 
 
 
 
-## 6、java 线程 和 操作系统线程的关系
+## 5、java 线程 和 操作系统线程的关系（了解即可）
 
 [java 线程如何产生？]( https://www.cnblogs.com/lusaisai/p/12729334.html)
 
@@ -278,7 +231,7 @@ java 线程就是 linux 系统的线程
 
 
 
-## 7、java 程序启动时会创建几个线程
+## 6、java 程序启动时会创建几个线程（了解即可）
 
 可以通过打印出 JVM 中的所有线程信息
 
@@ -309,15 +262,15 @@ public class ThreadNumDemo {
 
 
 
-## 8、守护线程
+## 7、守护线程
 
 守护线程 跟 普通线程 的区别：守护线程 本身不会影响程序的生命周期，当一个程序的所有普通线程都执行完毕时，那么守护线程也会相应退出
 
 一个程序的生命周期是看这些普通线程的，一旦所有的普通线程执行完成（包括主线程），那么程序也就走到头了，同时守护线程也会销毁
 
-Thread 类中有一个 setDaemon() 方法，它需要对象来调用，能将线程设置为守护线程
+Thread 类中有一个 setDaemon() 方法，能将线程设置为守护线程
 
-不过需要在 start() 之前设置，如果线程启动后设置，那么会抛出异常 IllegalThreadStateException
+**不过 setDaemon() 需要在线程 start() 前进行调用，否则会抛出异常 IllegalThreadStateException**
 
 
 
@@ -358,4 +311,70 @@ public abstract class A {
 
 如果不将 t2 设置为守护线程，那么 t1 和 main 线程都退出后，t2 也会继续执行，导致程序不会退出
 
-这也就是为什么 GC 线程要设置为 守护线程的原因了，因为如果程序逻辑都执行完了，结果由于 GC 线程还在执行而导致程序无法正常结束，这显然是有毛病的
+这也就是为什么 **GC 线程要设置为 守护线程** 的原因了，因为如果程序逻辑都执行完了，结果由于 GC 线程还在执行而导致程序无法正常结束，这显然是有毛病的
+
+
+
+## 8、interrupt()、interrupted()、isInterrupted()
+
+interrupt()：设置中断标志位，但是对于线程是否中断执行不是由操作系统决定的，而是用户自己决定的，即调用了 interrupt() 线程并不会立即中断执行
+
+```java
+public void interrupt() {
+    if (this != Thread.currentThread())
+        checkAccess();
+
+    synchronized (blockerLock) {
+        Interruptible b = blocker;
+        if (b != null) {
+            //调用 本地方法 interrupt0()，该方法不是用来中断线程，而是用来设置中断标志位
+            interrupt0();           // Just to set the interrupt flag
+            b.interrupt(this);
+            return;
+        }
+    }
+    interrupt0();
+}
+```
+
+
+
+interrupted()：该方法是一个 static 静态方法，判断中断标志位是否为 true，并且如果为 true 那么顺便重置中断标志位为 false
+
+```java
+public static boolean interrupted() {
+    return currentThread().isInterrupted(true);
+}
+```
+
+
+
+isInterrupted()：判断中断标志位是否为 true，但不会重置中断标志位
+
+```java
+public boolean isInterrupted() {
+    return isInterrupted(false);
+}
+```
+
+
+
+可以看到，设置中断标志位的只有 interrupt()
+
+而 interrupted() 和 isInterrupted() 只是判断中断标志位是否为 true，区别就在于一个会重置中断标志位，一个不会重置中断标志位它们内部调用的都是 方法重载的 `isInterrupted(boolean ClearInterrupted)`，它是一个本地方法
+
+```java
+private native boolean isInterrupted(boolean ClearInterrupted);
+```
+
+
+
+> #### 关于 InterruptedException 中断异常
+
+通过上面的说法，interrupt() 并不会直接中断线程，而是通知应该中断线程，**具体的中断时机由用户决定**
+
+我们可以发现，在很多地方的 for() ，比如 AQS、CyclicBarrier，都会去调用 isInterrupted() 去判断中断标志位，进而判断是否需要中断线程，这种都是用户自己来决定是否中断线程的
+
+像 wait()、lock() 这种线程是直接阻塞了的，所以调用 interrupt() 也不会去中断线程，只有唤醒后它们发现设置了中断标志位了才会抛出中断异常，但是在它们 park 的过程中是无法感知的
+
+像 wait(1000)、sleep(1000)、tryLock(1000) 这种，它们没有 park，可以当作是一个 for，每一次循环它们都会去判断是否存在中断标志位，如果存在那么直接 抛出异常

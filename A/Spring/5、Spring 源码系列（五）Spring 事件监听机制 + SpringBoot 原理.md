@@ -1,4 +1,4 @@
-# Spring 事件监听机制
+# Spring 事件监听机制 + SpringBoot 原理
 
 
 
@@ -311,4 +311,165 @@ private void doInvokeListener(ApplicationListener listener, ApplicationEvent eve
 
 
 
-## 2、SpringBoot 启动流程 + 借助事件监听器实现的自动装配原理
+## 2、SpringBoot 事件监听器实现启动流程
+
+### 2.1、SpringApplication 对象初始化
+
+
+
+1、我们定义的启动类如下：
+
+1）标注 @SpringBootApplication 注解
+
+2）如果需要开启事务，那么标注 EnableTransactionManagement 注解
+
+3）在 main() 中调用 SpringApplication 类的静态方法 run()，将启动类作为参数传入，开始运行 SpringBoot
+
+```java
+@SpringBootApplication
+@EnableTransactionManagement(proxyTargetClass=true)
+public class TestApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+}
+```
+
+
+
+2、静态 run() ：
+
+1）调用 SpringApplication 的构造方法，实例化 SpringApplication 对象
+
+2）调用 SpringApplication 对象 的 run()
+
+```java
+//调用①
+public static ConfigurableApplicationContext run(Class<?> primarySource, String... args) {
+    return run(new Class<?>[] { primarySource }, args);
+}
+//调用②
+public static ConfigurableApplicationContext run(Class<?>[] primarySources, String[] args) {
+    //创建一个 SpringApplication 对象，然后调用该对象的实例方法 run()
+    return new SpringApplication(primarySources).run(args);
+}
+```
+
+
+
+3、SpringApplication 的构造方法：
+
+1）将主启动类设置到集合中
+
+2）推断项目的启动类型
+
+3）从 spring.factories 文件中找到 ApplicationContextInitializer 类，进行反射实例化保存
+
+4）从 spring.factories 文件中找到 ApplicationListener 类，进行反射实例化保存
+
+```java
+public SpringApplication(Class<?>... primarySources) {
+    this(null, primarySources);
+}
+
+/*
+	resourceLoader：默认为 Null
+	primarySources：启动类集合，默认只有一个我们上面传入的启动类 TestApplication
+*/
+public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySources) {
+    this.resourceLoader = resourceLoader;
+    Assert.notNull(primarySources, "PrimarySources must not be null");
+    //将启动类存储到集合中
+    this.primarySources = new LinkedHashSet<>(Arrays.asList(primarySources));
+    /*
+    	deduceFromClasspath() 推断启动类型：NONE、SERVLET、REACTIVE，这里直接决定了项目是什么类型的
+    	NONE：不启动 tomcat，直接按照正常流程走，即不是一个 WEB 项目
+    	SERVLET：以 servlet 的形式启动内嵌的 tomcat
+    	REACTIVE：以 reactive 的形式启动内嵌的 tomcat
+    	
+    	推断的依据为是否已经加载 DispatcherServlet ，即能够 Class.forName() 成功
+    	我们引入了 spring-boot-web-starter，所以是存在该类的，所以是 SERVLET
+    */
+    this.webApplicationType = WebApplicationType.deduceFromClasspath();
+    /*
+        从 spring.factories 文件中找到 ApplicationContextInitializer 类型的 bean 并通过反射实例化保存
+        ApplicationContextInitializer 是应用上下文初始化器，用于 IOC 容器 refresh() 前初始化一些组件
+
+        如果我们要进行初始化，那么我们只需要实现 ApplicationContextInitializer 接口即可
+    */
+    setInitializers((Collection) getSpringFactoriesInstances(ApplicationContextInitializer.class));
+    
+    /*
+    	从 spring.factories 文件中找到 ApplicationListener 类型的 bean 并通过反射实例化保存
+    	ApplicationListener 是事件监听器
+    	事件监听机制是在 Spring 中就已经存在的概念，Spring 默认定义了四种类型的事件，对应 refresh()、stop()、start()、clean() 完成后的事件
+    	不过 SpringBoot 对它进行了扩展
+    */
+    setListeners((Collection) getSpringFactoriesInstances(ApplicationListener.class));
+    this.mainApplicationClass = deduceMainApplicationClass();
+}	
+```
+
+<img src="https://pic2.zhimg.com/80/v2-79fe654a0ecfcf0d58ad74cec8e4c7e5_720w.jpg" style="zoom:70%;" />
+
+
+
+4、SpringApplication 的 run()：
+
+```java
+public ConfigurableApplicationContext run(String... args) {
+    StopWatch stopWatch = new StopWatch();
+    stopWatch.start();
+    ConfigurableApplicationContext context = null;
+    Collection<SpringBootExceptionReporter> exceptionReporters = new ArrayList<>();
+    configureHeadlessProperty();
+    SpringApplicationRunListeners listeners = getRunListeners(args);
+    listeners.starting();
+    try {
+        ApplicationArguments applicationArguments = new DefaultApplicationArguments(args);
+        ConfigurableEnvironment environment = prepareEnvironment(listeners, applicationArguments);
+        configureIgnoreBeanInfo(environment);
+        
+        //打印 Banner
+        Banner printedBanner = printBanner(environment);
+        
+        //根据上面推断的启动类型来创建 应用上下文 ApplicationContext 对象
+        context = createApplicationContext();
+        
+        exceptionReporters = getSpringFactoriesInstances(SpringBootExceptionReporter.class,
+                                                         new Class[] { ConfigurableApplicationContext.class }, context);
+        
+        //在 refresh() 调用之前的准备
+        prepareContext(context, environment, listeners, applicationArguments, printedBanner);
+        //调用 ac 的 refresh() 刷新 IOC 容器（实例化 bean）
+        refreshContext(context);
+        //在 refresh() 调用之后的准备，空方法
+        afterRefresh(context, applicationArguments);
+        
+        stopWatch.stop();
+        if (this.logStartupInfo) {
+            new StartupInfoLogger(this.mainApplicationClass).logStarted(getApplicationLog(), stopWatch);
+        }
+        listeners.started(context);
+        callRunners(context, applicationArguments);
+    }
+    catch (Throwable ex) {
+        handleRunFailure(context, ex, exceptionReporters, listeners);
+        throw new IllegalStateException(ex);
+    }
+
+    try {
+        listeners.running(context);
+    }
+    catch (Throwable ex) {
+        handleRunFailure(context, ex, exceptionReporters, null);
+        throw new IllegalStateException(ex);
+    }
+    return context;
+}
+```
+
+
+
+
+
